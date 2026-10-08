@@ -241,7 +241,9 @@ function TeamView({ st, team }: { st: PublicState; team: Team }) {
   const status =
     st.view === "lobby"
       ? "Jste ve hře! Čekáme, až moderátor spustí show…"
-      : st.view === "scoreboard"
+      : st.view === "intro"
+        ? "🎬 Show začíná! Koukejte na projektor 👀"
+        : st.view === "scoreboard"
         ? "Koukejte na projektor — průběžné pořadí!"
         : st.view === "final"
           ? rank === 1

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { XIcon } from "@/components/shared";
 import { emitAck, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { MAX_STRIKES, type Ack, type AdminCmd, type AdminState, type Question, type Team, type View } from "@/lib/types";
+import { MAX_STRIKES, type Ack, type AdminCmd, type AdminState, type Team, type View } from "@/lib/types";
 import { QuestionsTab } from "./QuestionsTab";
 
 const SESSION_KEY = "chc-admin-session";
@@ -170,180 +170,128 @@ type Cmd = (c: AdminCmd) => Promise<boolean>;
 // ───────────────────────────── HRA ─────────────────────────────
 
 const VIEWS: [View, string][] = [
-  ["lobby", "Lobby + QR"],
+  ["lobby", "Lobby"],
+  ["intro", "Intro"],
   ["board", "Otázka"],
   ["scoreboard", "Pořadí"],
   ["final", "Finále"],
 ];
 
+type Step = "lobby" | "intro" | "question" | "scores" | "final";
+
+function stepOf(st: AdminState): Step {
+  switch (st.view) {
+    case "lobby":
+      return "lobby";
+    case "intro":
+      return "intro";
+    case "board":
+      return st.round ? "question" : "lobby";
+    case "scoreboard":
+      return "scores";
+    case "final":
+      return "final";
+  }
+}
+
+const teamsWord = (n: number) => (n === 1 ? "tým" : n < 5 ? "týmy" : "týmů");
+
 function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
-  const [sel, setSel] = useState(Math.max(0, st.questionIndex));
   const [sheet, setSheet] = useState<Sheet>(null);
-  const current = st.questionIndex;
-  const q: Question | undefined = st.questions[sel];
-  const isLive = sel === current && !!st.round;
-  const strikes = st.round?.strikes ?? {};
-
-  // když se otázka změní odjinud, přeskočit na ni
-  useEffect(() => {
-    if (current >= 0) setSel(current);
-  }, [current]);
-
+  const step = stepOf(st);
   const total = st.questions.length;
-  const next = current + 1;
+  const next = st.questionIndex + 1;
+  const hasNext = next < total;
+  const unrevealed = st.round?.revealed.some((r) => !r) ?? false;
+
+  let primary: { label: string; sub?: string; run: () => void; disabled?: boolean };
+  switch (step) {
+    case "lobby":
+      primary = {
+        label: "▶ Start hry",
+        sub: st.teams.length ? `${st.teams.length} ${teamsWord(st.teams.length)} ve hře` : "Čekáme na týmy…",
+        run: () => cmd({ type: "startShow" }),
+        disabled: st.teams.length === 0,
+      };
+      break;
+    case "intro":
+      primary = {
+        label: "📣 Ohlásit 1. otázku",
+        run: () => cmd({ type: "goto", index: 0 }),
+        disabled: total === 0,
+      };
+      break;
+    case "scores":
+      primary = hasNext
+        ? {
+            label: `📣 Ohlásit ${next + 1}. otázku`,
+            sub: `${next + 1} z ${total}`,
+            run: () => cmd({ type: "goto", index: next }),
+          }
+        : { label: "🏆 Vyhlásit vítěze", run: () => cmd({ type: "setView", view: "final" }) };
+      break;
+    case "final":
+      primary = { label: "🎉 Přehrát vyhlášení znovu", run: () => cmd({ type: "setView", view: "final" }) };
+      break;
+    default:
+      primary = { label: "", run: () => {} };
+  }
 
   return (
     <div className="adm-body">
-      <section className="seg">
-        {VIEWS.map(([v, label]) => (
-          <button
-            key={v}
-            className={`seg-btn ${st.view === v ? "on" : ""}`}
-            onClick={() => cmd({ type: "setView", view: v })}
-            disabled={v === "board" && !st.round}
-          >
-            {label}
-          </button>
-        ))}
-      </section>
+      <Stepper st={st} step={step} />
 
-      {total === 0 ? (
-        <div className="card-a empty">Nemáš žádné otázky. Přidej je v záložce Otázky.</div>
-      ) : (
-        <section className="card-a qcard">
-          <div className="qnav">
-            <button className="icon-btn" onClick={() => setSel((s) => Math.max(0, s - 1))} disabled={sel <= 0} aria-label="Předchozí">
-              ‹
-            </button>
-            <div className="qnav-mid">
-              <span className="qnav-num">
-                Otázka {sel + 1}
-                <span className="mute"> / {total}</span>
-              </span>
-              <span className={`tag ${isLive ? "live" : ""}`}>
-                {isLive ? "● Na projektoru" : current === -1 ? "Nespuštěno" : "Náhled"}
-              </span>
-            </div>
-            <button
-              className="icon-btn"
-              onClick={() => setSel((s) => Math.min(total - 1, s + 1))}
-              disabled={sel >= total - 1}
-              aria-label="Další"
-            >
-              ›
-            </button>
-          </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={`${step}-${st.questionIndex}`}
+          className="step"
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -30 }}
+          transition={{ duration: 0.22 }}
+        >
+          {step === "lobby" && <LobbyStep st={st} />}
+          {step === "intro" && <IntroStep cmd={cmd} />}
+          {step === "question" && <QuestionStep st={st} cmd={cmd} onFlip={(index) => setSheet({ kind: "flip", index })} />}
+          {step === "scores" && <ScoresStep st={st} cmd={cmd} />}
+          {step === "final" && <FinalStep st={st} />}
+        </motion.div>
+      </AnimatePresence>
 
-          {q && (
-            <>
-              <p className="qtext">
-                {q.text}
-                {q.multiplier > 1 && <span className="mult">×{q.multiplier}</span>}
-              </p>
-
-              <ol className="answers">
-                {q.answers.map((a, i) => {
-                  const rev = isLive ? st.round!.revealed[i] : null;
-                  const by = rev?.by ? st.teams.find((t) => t.id === rev.by) : undefined;
-                  return (
-                    <li key={i}>
-                      <button
-                        className={`ans ${rev ? (rev.by ? "done" : "done dim") : ""}`}
-                        disabled={!isLive || !!rev}
-                        onClick={() => setSheet({ kind: "flip", index: i })}
-                      >
-                        <span className="ans-n">{i + 1}</span>
-                        <span className="ans-t">{a.text}</span>
-                        {by && <span className="ans-by">{by.emoji}</span>}
-                        {rev && !rev.by && <span className="ans-by mute">—</span>}
-                        <span className="ans-p">{a.points * q.multiplier}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              {!isLive && (
-                <button className="btn btn-y btn-block" onClick={() => cmd({ type: "goto", index: sel })}>
-                  ▶ Spustit otázku {sel + 1} na projektoru
-                </button>
-              )}
-            </>
-          )}
-        </section>
-      )}
-
-      {st.round && (
-        <section className="card-a">
-          <h3 className="h3">Pokusy týmů</h3>
-          <div className="strike-list">
-            {st.teams.map((t) => {
-              const n = strikes[t.id] ?? 0;
-              return (
-                <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
-                  <span>{t.emoji}</span>
-                  <span className="strike-name">{t.name}</span>
-                  <span className="mini-x">
-                    {Array.from({ length: MAX_STRIKES }, (_, i) => (
-                      <span key={i} className={i < n ? "on" : ""}>
-                        {i < n && <XIcon />}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              );
-            })}
-            {st.teams.length === 0 && <span className="mute">Žádné týmy.</span>}
-          </div>
-          <div className="row-btns">
-            <button className="btn" onClick={() => cmd({ type: "revealAll" })} disabled={!st.round.revealed.some((r) => !r)}>
-              Odkrýt zbytek
-            </button>
-            <button className="btn" onClick={() => cmd({ type: "clearStrikes" })}>
-              Vynulovat pokusy
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className="card-a">
-        <h3 className="h3">Bzučáky na telefonech týmů</h3>
-        <p className="mute small">
-          {st.buzzer.open
-            ? "Otevřeno — kdo zmáčkne první, ukáže se na projektoru."
-            : st.buzzer.winner
-              ? `První: ${st.teams.find((t) => t.id === st.buzzer.winner)?.emoji ?? ""} ${st.teams.find((t) => t.id === st.buzzer.winner)?.name ?? "?"}`
-              : "Volitelné — pro souboj „kdo dřív“."}
-        </p>
-        <div className="row-btns">
-          <button className={`btn ${st.buzzer.open ? "btn-y" : ""}`} onClick={() => cmd({ type: "buzzer", action: "open" })}>
-            {st.buzzer.open ? "● Otevřeno" : "Otevřít"}
-          </button>
-          <button className="btn" onClick={() => cmd({ type: "buzzer", action: "reset" })}>
-            Zavřít / reset
-          </button>
-        </div>
-      </section>
+      <Advanced st={st} cmd={cmd} />
 
       <div className="spacer" />
 
-      <div className="actionbar">
-        <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
-          ↶<small>Zpět</small>
-        </button>
-        <button className="btn act-buzz" disabled={!st.round || st.teams.length === 0} onClick={() => setSheet({ kind: "strike" })}>
-          <XIcon className="act-x" />
-          BZZZ
-        </button>
-        <button
-          className="btn act-next"
-          onClick={() => (next < total ? cmd({ type: "goto", index: next }) : cmd({ type: "setView", view: "scoreboard" }))}
-          disabled={total === 0}
-        >
-          {next < total ? "›" : "🏆"}
-          <small>{next < total ? `Otázka ${next + 1}` : "Pořadí"}</small>
-        </button>
-      </div>
+      {step === "question" ? (
+        <div className="actionbar">
+          <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
+            ↶<small>Zpět</small>
+          </button>
+          <button className="btn act-buzz" disabled={st.teams.length === 0} onClick={() => setSheet({ kind: "strike" })}>
+            <XIcon className="act-x" />
+            BZZZ
+          </button>
+          {unrevealed ? (
+            <button className="btn act-next" onClick={() => cmd({ type: "revealAll" })}>
+              👁<small>Odkrýt zbytek</small>
+            </button>
+          ) : (
+            <button className="btn act-next" onClick={() => cmd({ type: "setView", view: "scoreboard" })}>
+              🏆<small>Pořadí</small>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="actionbar single">
+          <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
+            ↶<small>Zpět</small>
+          </button>
+          <button className="btn btn-y act-primary" onClick={primary.run} disabled={primary.disabled}>
+            {primary.label}
+            {primary.sub && <small>{primary.sub}</small>}
+          </button>
+        </div>
+      )}
 
       <TeamSheet
         sheet={sheet}
@@ -357,6 +305,236 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         }}
       />
     </div>
+  );
+}
+
+function Stepper({ st, step }: { st: AdminState; step: Step }) {
+  const items = ["Lobby", "Intro", ...st.questions.map((_, i) => `${i + 1}`), "🏆"];
+  const at =
+    step === "lobby" ? 0 : step === "intro" ? 1 : step === "final" ? items.length - 1 : 2 + Math.max(0, st.questionIndex);
+  return (
+    <div className="stepper">
+      {items.map((label, i) => (
+        <span key={i} className={`stp ${i < at ? "done" : ""} ${i === at ? "now" : ""}`}>
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LobbyStep({ st }: { st: AdminState }) {
+  return (
+    <section className="card-a">
+      <div className="lobby-a-head">
+        <div>
+          <h3 className="h3">Kód hry</h3>
+          <span className="big-code">{st.joinCode}</span>
+        </div>
+        <p className="mute small">Týmy naskenují QR na projektoru. Tým bez telefonu přidáš v záložce Týmy.</p>
+      </div>
+      <h3 className="h3">Připojené týmy · {st.teams.length}</h3>
+      {st.teams.length === 0 ? (
+        <p className="waiting-a">
+          Zatím nikdo
+          <span className="waiting-dots">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </p>
+      ) : (
+        <div className="team-chips">
+          <AnimatePresence>
+            {st.teams.map((t) => (
+              <motion.span
+                key={t.id}
+                layout
+                className="team-chip"
+                initial={{ scale: 0.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.4, opacity: 0 }}
+              >
+                {t.emoji} {t.name} <span className={`dot ${t.online ? "on" : ""}`} />
+              </motion.span>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function IntroStep({ cmd }: { cmd: Cmd }) {
+  return (
+    <section className="card-a center-card">
+      <span className="step-emoji">🎬</span>
+      <h2 className="step-title">Na projektoru běží intro</h2>
+      <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), ohlas první otázku.</p>
+      <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "intro" })}>
+        ↺ Přehrát intro znovu
+      </button>
+    </section>
+  );
+}
+
+function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (i: number) => void }) {
+  const q = st.questions[st.questionIndex];
+  const round = st.round;
+  if (!q || !round) return null;
+  const winner = st.buzzer.winner ? st.teams.find((t) => t.id === st.buzzer.winner) : undefined;
+
+  return (
+    <>
+      <section className="card-a qcard">
+        <div className="q-head">
+          <span className="qnav-num">
+            Otázka {st.questionIndex + 1}
+            <span className="mute"> / {st.questions.length}</span>
+          </span>
+          {q.multiplier > 1 && <span className="mult">body ×{q.multiplier}</span>}
+        </div>
+        <p className="qtext">{q.text}</p>
+        <p className="mute small">Klepni na odpověď, kterou někdo uhodl.</p>
+        <ol className="answers">
+          {q.answers.map((a, i) => {
+            const rev = round.revealed[i];
+            const by = rev?.by ? st.teams.find((t) => t.id === rev.by) : undefined;
+            return (
+              <li key={i}>
+                <button className={`ans ${rev ? (rev.by ? "done" : "done dim") : ""}`} disabled={!!rev} onClick={() => onFlip(i)}>
+                  <span className="ans-n">{i + 1}</span>
+                  <span className="ans-t">{a.text}</span>
+                  {by && <span className="ans-by">{by.emoji}</span>}
+                  {rev && !rev.by && <span className="ans-by mute">—</span>}
+                  <span className="ans-p">{a.points * q.multiplier}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section className="card-a">
+        <h3 className="h3">Pokusy týmů</h3>
+        <div className="strike-list">
+          {st.teams.map((t) => {
+            const n = round.strikes[t.id] ?? 0;
+            return (
+              <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
+                <span>{t.emoji}</span>
+                <span className="strike-name">{t.name}</span>
+                <span className="mini-x">
+                  {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                    <span key={i} className={i < n ? "on" : ""}>
+                      {i < n && <XIcon />}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <button className="btn btn-sm" onClick={() => cmd({ type: "clearStrikes" })}>
+          Vynulovat pokusy
+        </button>
+      </section>
+
+      <section className="card-a">
+        <h3 className="h3">Bzučáky na telefonech týmů</h3>
+        <p className="mute small">
+          {st.buzzer.open
+            ? "Otevřeno — kdo zmáčkne první, ukáže se na projektoru."
+            : winner
+              ? `První: ${winner.emoji} ${winner.name}`
+              : "Volitelné — souboj „kdo dřív“."}
+        </p>
+        <div className="row-btns">
+          <button className={`btn btn-sm ${st.buzzer.open ? "btn-y" : ""}`} onClick={() => cmd({ type: "buzzer", action: "open" })}>
+            {st.buzzer.open ? "● Otevřeno" : "Otevřít"}
+          </button>
+          <button className="btn btn-sm" onClick={() => cmd({ type: "buzzer", action: "reset" })}>
+            Zavřít / reset
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function Ranking({ teams }: { teams: Team[] }) {
+  const sorted = [...teams].sort((a, b) => b.score - a.score);
+  return (
+    <ol className="rank-list">
+      {sorted.map((t, i) => (
+        <li key={t.id}>
+          <span className="team-rank">{i + 1}.</span>
+          <span>{t.emoji}</span>
+          <span className="strike-name">{t.name}</span>
+          <b className="y">{t.score}</b>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ScoresStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
+  return (
+    <section className="card-a">
+      <h3 className="h3">Na projektoru: průběžné pořadí</h3>
+      <Ranking teams={st.teams} />
+      {st.round && (
+        <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "board" })}>
+          ← Zpět na otázku {st.questionIndex + 1}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function FinalStep({ st }: { st: AdminState }) {
+  const winner = [...st.teams].sort((a, b) => b.score - a.score)[0];
+  return (
+    <section className="card-a center-card">
+      <span className="step-emoji">{winner?.emoji ?? "🏆"}</span>
+      <h2 className="step-title">Vítěz: {winner?.name ?? "—"}</h2>
+      <Ranking teams={st.teams} />
+      <p className="mute small">Novou hru spustíš v ⚙ Nastavení.</p>
+    </section>
+  );
+}
+
+function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
+  return (
+    <details className="card-a adv">
+      <summary>Pokročilé ovládání</summary>
+      <h3 className="h3">Projektor ukazuje</h3>
+      <div className="seg seg5">
+        {VIEWS.map(([v, label]) => (
+          <button
+            key={v}
+            className={`seg-btn ${st.view === v ? "on" : ""}`}
+            onClick={() => cmd({ type: "setView", view: v })}
+            disabled={v === "board" && !st.round}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <h3 className="h3">Skočit na otázku</h3>
+      <div className="jump-list">
+        {st.questions.map((q, i) => (
+          <button
+            key={q.id}
+            className={`jump ${i === st.questionIndex ? "on" : ""}`}
+            onClick={() => confirm(`Spustit otázku ${i + 1}? Aktuální kolo se zahodí.`) && cmd({ type: "goto", index: i })}
+          >
+            <span className="qedit-n">{i + 1}</span>
+            <span className="qedit-t">{q.text}</span>
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
 

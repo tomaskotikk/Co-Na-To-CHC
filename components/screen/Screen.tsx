@@ -135,7 +135,7 @@ export function Screen() {
 
       {st && (
         <>
-          {st.view !== "lobby" && (
+          {st.view !== "lobby" && st.view !== "intro" && (
             <div className="topbar">
               <Logo />
               <div className="topbar-right">
@@ -152,6 +152,11 @@ export function Screen() {
             {st.view === "lobby" && (
               <motion.div key="lobby" className="view" {...viewMotion}>
                 <Lobby st={st} base={base} />
+              </motion.div>
+            )}
+            {st.view === "intro" && (
+              <motion.div key="intro" className="view" {...viewMotion}>
+                <ShowIntro teams={st.teams} live={lastFx?.kind === "showIntro"} />
               </motion.div>
             )}
             {st.view === "board" && st.question && st.round && (
@@ -331,9 +336,11 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
   const rows = Math.ceil(q.slots / 2);
   const teamById = useMemo(() => new Map(st.teams.map((t) => [t.id, t])), [st.teams]);
   const flipFx = fx?.kind === "flip" ? fx : null;
+  // po ohlášení otázky naskočí bublina a karty až za žlutým stěračem
+  const entering = fx?.kind === "intro" && fx.number === q.number;
 
   return (
-    <section className="board">
+    <section className={`board ${entering ? "enter" : ""}`}>
       <div className="q-wrap">
         <div className="q-meta">{q.multiplier > 1 && <span className="pill y">Body ×{q.multiplier}</span>}</div>
         <Bubble className="q-bubble" tail="14%">
@@ -536,5 +543,47 @@ function Pod({ t, place, h }: { t?: Team; place: number; h: number }) {
         </span>
       </div>
     </div>
+  );
+}
+
+// ───────────────────────────── INTRO SHOW ─────────────────────────────
+
+function ShowIntro({ teams, live }: { teams: Team[]; live: boolean }) {
+  useEffect(() => {
+    if (!live) return;
+    const timers = [
+      setTimeout(() => play("drumroll"), 0),
+      setTimeout(() => play("crash"), 2600),
+      setTimeout(() => play("fanfare"), 2750),
+      ...teams.map((_, i) => setTimeout(() => play("pop"), 4300 + i * 160)),
+    ];
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
+  return (
+    <section className={`showintro ${live ? "play" : "hold"}`} style={{ ["--n" as string]: teams.length }}>
+      <div className="si-flash" />
+      <p className="si-pre si-pre1">Dámy a pánové…</p>
+      <p className="si-pre si-pre2">vítejte u show</p>
+      <div className="si-logo">
+        <Logo />
+      </div>
+      <p className="si-sub">
+        Stužkovací show · <b>Creative Hill College</b>
+      </p>
+      <div className="si-teams">
+        <span className="si-label">Dnes hrají</span>
+        <div className="si-chips">
+          {teams.map((t, i) => (
+            <span key={t.id} className="lobby-chip si-chip" style={{ ["--i" as string]: i }}>
+              <span className="em">{t.emoji}</span>
+              {t.name}
+            </span>
+          ))}
+        </div>
+      </div>
+      <p className="si-ready">Připravte se na první otázku</p>
+    </section>
   );
 }

@@ -338,6 +338,16 @@ export class Game {
   /** vrací chybovou hlášku nebo null */
   private command(cmd: AdminCmd): string | null {
     switch (cmd.type) {
+      case "startShow": {
+        if (this.s.teams.length === 0) return "Nejdřív se musí připojit aspoň jeden tým.";
+        this.flushPending();
+        this.apply(() => {
+          this.s.view = "intro";
+          this.buzzer = { open: false, winner: null };
+          this.emitFx({ kind: "showIntro" });
+        });
+        return null;
+      }
       case "goto": {
         if (!this.questions[cmd.index]) return "Otázka neexistuje.";
         this.flushPending();
@@ -425,6 +435,7 @@ export class Game {
         this.apply(() => {
           this.s.view = cmd.view;
           if (cmd.view === "final") this.emitFx({ kind: "final" });
+          if (cmd.view === "intro") this.emitFx({ kind: "showIntro" });
         });
         return null;
       }

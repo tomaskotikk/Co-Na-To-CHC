@@ -18,7 +18,7 @@ export type Team = {
   online: boolean;
 };
 
-export type View = "lobby" | "board" | "scoreboard" | "final";
+export type View = "lobby" | "intro" | "board" | "scoreboard" | "final";
 
 export type RevealInfo = { by: string | null; points: number };
 
@@ -38,7 +38,8 @@ export type Fx =
   | { id: number; kind: "buzz"; teamId: string }
   | { id: number; kind: "join"; teamId: string }
   | { id: number; kind: "undo" }
-  | { id: number; kind: "final" };
+  | { id: number; kind: "final" }
+  | { id: number; kind: "showIntro" };
 
 export type Pending = {
   id: number;
@@ -91,6 +92,7 @@ export type AdminState = PublicState & {
 };
 
 export type AdminCmd =
+  | { type: "startShow" }
   | { type: "goto"; index: number }
   | { type: "flip"; index: number; teamId: string | null }
   | { type: "strike"; teamId: string }

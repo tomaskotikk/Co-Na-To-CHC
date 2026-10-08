@@ -134,7 +134,25 @@ function tick() {
   tone({ type: "square", freq: 1800, dur: 0.03, vol: 0.05, filter: 4000 });
 }
 
-export const sfx = { correct, wrong, intro, revealAll, pop, buzz, fanfare, tick };
+/** vířivý buben s crescendem (~2.4 s) */
+function drumroll() {
+  const len = 2.4;
+  for (let t = 0; t < len; t += 0.042) {
+    const p = t / len;
+    noise(t, 0.06, 0.03 + p * p * 0.22, 1600 + p * 900);
+    if (Math.round(t / 0.042) % 4 === 0) tone({ freq: 140, to: 90, start: t, dur: 0.12, vol: 0.05 + p * 0.12 });
+  }
+}
+
+/** činel + basový úder */
+function crash() {
+  noise(0, 1.8, 0.32, 4500);
+  noise(0, 0.5, 0.2, 900);
+  tone({ freq: 70, to: 38, dur: 0.9, vol: 0.55 });
+  tone({ type: "triangle", freq: 140, to: 70, dur: 0.5, vol: 0.25 });
+}
+
+export const sfx = { correct, wrong, intro, revealAll, pop, buzz, fanfare, tick, drumroll, crash };
 
 export function play(name: keyof typeof sfx) {
   if (!ctx || muted) return;
