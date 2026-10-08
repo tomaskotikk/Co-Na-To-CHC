@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: co-na-to-chc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: SCREEN_KEY
+        generateValue: true

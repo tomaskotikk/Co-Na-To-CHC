@@ -1,0 +1,95 @@
+[
+  {
+    "id": "knyhJ7uP",
+    "text": "Který z učitelů by nejlépe sbalil holku / kluka na diskotéce?",
+    "multiplier": 1,
+    "answers": [
+      {
+        "text": "Učitel č. 1",
+        "points": 31
+      },
+      {
+        "text": "Učitel č. 2",
+        "points": 24
+      },
+      {
+        "text": "Učitel č. 3",
+        "points": 17
+      },
+      {
+        "text": "Učitel č. 4",
+        "points": 13
+      },
+      {
+        "text": "Učitel č. 5",
+        "points": 9
+      },
+      {
+        "text": "Učitel č. 6",
+        "points": 6
+      }
+    ]
+  },
+  {
+    "id": "Gq13vQzV",
+    "text": "Co nejčastěji děláš o přestávce?",
+    "multiplier": 1,
+    "answers": [
+      {
+        "text": "Mobil",
+        "points": 38
+      },
+      {
+        "text": "Svačina",
+        "points": 22
+      },
+      {
+        "text": "Spánek na lavici",
+        "points": 14
+      },
+      {
+        "text": "Opisování úkolů",
+        "points": 11
+      },
+      {
+        "text": "Drby",
+        "points": 9
+      },
+      {
+        "text": "Záchody",
+        "points": 6
+      }
+    ]
+  },
+  {
+    "id": "at9NtpuW",
+    "text": "Bez čeho by ses neobešel/neobešla u maturity?",
+    "multiplier": 2,
+    "answers": [
+      {
+        "text": "Tahák",
+        "points": 35
+      },
+      {
+        "text": "Káva",
+        "points": 21
+      },
+      {
+        "text": "Štěstí",
+        "points": 16
+      },
+      {
+        "text": "Spolužák vedle",
+        "points": 12
+      },
+      {
+        "text": "Energeťák",
+        "points": 10
+      },
+      {
+        "text": "Modlitba",
+        "points": 6
+      }
+    ]
+  }
+]

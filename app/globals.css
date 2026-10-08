@@ -1,0 +1,169 @@
+:root {
+  --y: #ffd500;
+  --y-hi: #ffe766;
+  --y-lo: #c9a800;
+  --ink: #0b0b0b;
+  --ink-2: #141414;
+  --ink-3: #1d1d1d;
+  --line: #2c2c2c;
+  --white: #f7f6f1;
+  --mute: #8d8b84;
+  --ok: #3ddc84;
+  --font-d: var(--font-display), "Arial Black", sans-serif;
+  --font-b: var(--font-body), system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--ink);
+  color: var(--white);
+  font-family: var(--font-b);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  touch-action: manipulation;
+}
+
+::selection {
+  background: var(--y);
+  color: var(--ink);
+}
+
+/* ───────────── bublina (podle loga) ───────────── */
+
+.bubble {
+  --bw: 0.14em;
+  --bubble-bg: var(--ink);
+  position: relative;
+  border: var(--bw) solid var(--y);
+  background: var(--bubble-bg);
+}
+
+/* mezera ve spodní hraně, kudy vede zobáček */
+.bubble::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--tail-x) + var(--bw) * 0.56);
+  width: calc(var(--bw) * 2.5);
+  top: 100%;
+  height: var(--bw);
+  background: var(--bubble-bg);
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--tail-x);
+  top: 100%;
+  width: calc(var(--bw) * 3.64);
+  height: calc(var(--bw) * 3.74);
+  background: var(--y);
+  clip-path: polygon(0 0, 15.4% 0, 52.2% 50.8%, 84.1% 0, 100% 0, 100% 26.7%, 53.3% 100%, 0 26.7%);
+}
+
+/* ───────────── logo ───────────── */
+
+.logo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-family: var(--font-d);
+  font-weight: 900;
+  line-height: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.logo-top {
+  font-size: 0.42em;
+  letter-spacing: 0.08em;
+  padding-left: 0.08em;
+  margin-bottom: 0.18em;
+}
+
+.logo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.08em;
+}
+
+.logo-bubble {
+  --bw: 0.075em;
+  padding: 0.14em 0.2em 0.05em;
+}
+
+.logo-chc {
+  color: var(--y);
+  display: block;
+  letter-spacing: 0.04em;
+}
+
+.logo-q {
+  color: var(--y);
+  font-size: 1.05em;
+  transform: rotate(8deg) translateY(-0.04em);
+}
+
+/* ───────────── utility ───────────── */
+
+.grain {
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.dot {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: #555;
+  flex: none;
+}
+.dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 0.6em var(--ok);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
