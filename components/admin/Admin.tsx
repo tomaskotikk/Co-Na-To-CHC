@@ -4,13 +4,31 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { XIcon } from "@/components/shared";
+import { TeamIcon } from "@/components/TeamIcon";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Clapperboard,
+  Eye,
+  Hourglass,
+  Megaphone,
+  PartyPopper,
+  Pencil,
+  Play,
+  RotateCcw,
+  Settings,
+  Trash2,
+  Trophy,
+  Undo2,
+  type LucideIcon,
+} from "lucide-react";
 import { emitAck, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
 import { MAX_STRIKES, type Ack, type AdminCmd, type AdminState, type Team, type View } from "@/lib/types";
 import { QuestionsTab } from "./QuestionsTab";
 
 const SESSION_KEY = "chc-admin-session";
 
-type Status = "connecting" | "claimable" | "invalid" | "admin" | "kicked";
+type Status = "connecting" | "claimable" | "invalid" | "admin" | "kicked" | "ended";
 type Tab = "game" | "teams" | "questions" | "settings";
 type Sheet = { kind: "flip"; index: number } | { kind: "strike" } | null;
 
@@ -49,11 +67,11 @@ export function Admin({ token }: { token: string }) {
   useSocketEvent<AdminState>("admin:state", setSt);
   useSocketEvent(
     "admin:kicked",
-    useCallback(() => {
+    useCallback((reason?: string) => {
       try {
         localStorage.removeItem(SESSION_KEY);
       } catch {}
-      setStatus("kicked");
+      setStatus(reason === "ended" ? "ended" : "kicked");
       setSt(null);
     }, []),
   );
@@ -110,11 +128,15 @@ export function Admin({ token }: { token: string }) {
             </button>
           </>
         )}
-        {(status === "invalid" || status === "kicked") && (
+        {(status === "invalid" || status === "kicked" || status === "ended") && (
           <p className="gate-text">
-            {status === "kicked" ? "Ovládání převzalo jiné zařízení." : "Tenhle odkaz už neplatí."}
+            {status === "ended"
+              ? "Show je ukončená a vše je vynulované."
+              : status === "kicked"
+                ? "Ovládání převzalo jiné zařízení."
+                : "Tenhle odkaz už neplatí."}
             <br />
-            <span className="mute">Na notebooku stiskni Shift + A pro nový QR kód.</span>
+            <span className="mute">Pro novou hru naskenuj admin QR kód na projektoru.</span>
           </p>
         )}
         {toast && <div className="toast">{toast}</div>}
@@ -138,8 +160,8 @@ export function Admin({ token }: { token: string }) {
               ["game", "Hra"],
               ["teams", `Týmy · ${st.teams.length}`],
               ["questions", "Otázky"],
-              ["settings", "⚙"],
-            ] as [Tab, string][]
+              ["settings", <Settings key="s" className="tab-ic" aria-label="Nastavení" />],
+            ] as [Tab, React.ReactNode][]
           ).map(([k, label]) => (
             <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>
               {label}
@@ -204,11 +226,12 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
   const hasNext = next < total;
   const unrevealed = st.round?.revealed.some((r) => !r) ?? false;
 
-  let primary: { label: string; sub?: string; run: () => void; disabled?: boolean };
+  let primary: { icon?: LucideIcon; label: string; sub?: string; run: () => void; disabled?: boolean };
   switch (step) {
     case "lobby":
       primary = {
-        label: "▶ Start hry",
+        icon: Play,
+        label: "Start hry",
         sub: st.teams.length ? `${st.teams.length} ${teamsWord(st.teams.length)} ve hře` : "Čekáme na týmy…",
         run: () => cmd({ type: "startShow" }),
         disabled: st.teams.length === 0,
@@ -216,7 +239,8 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
       break;
     case "intro":
       primary = {
-        label: "📣 Ohlásit 1. otázku",
+        icon: Megaphone,
+        label: "Ohlásit 1. otázku",
         run: () => cmd({ type: "goto", index: 0 }),
         disabled: total === 0,
       };
@@ -224,14 +248,15 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
     case "scores":
       primary = hasNext
         ? {
-            label: `📣 Ohlásit ${next + 1}. otázku`,
+            icon: Megaphone,
+            label: `Ohlásit ${next + 1}. otázku`,
             sub: `${next + 1} z ${total}`,
             run: () => cmd({ type: "goto", index: next }),
           }
-        : { label: "🏆 Vyhlásit vítěze", run: () => cmd({ type: "setView", view: "final" }) };
+        : { icon: Trophy, label: "Vyhlásit vítěze", run: () => cmd({ type: "setView", view: "final" }) };
       break;
     case "final":
-      primary = { label: "🎉 Přehrát vyhlášení znovu", run: () => cmd({ type: "setView", view: "final" }) };
+      primary = { icon: PartyPopper, label: "Přehrát vyhlášení znovu", run: () => cmd({ type: "setView", view: "final" }) };
       break;
     default:
       primary = { label: "", run: () => {} };
@@ -254,7 +279,7 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
           {step === "intro" && <IntroStep cmd={cmd} />}
           {step === "question" && <QuestionStep st={st} cmd={cmd} onFlip={(index) => setSheet({ kind: "flip", index })} />}
           {step === "scores" && <ScoresStep st={st} cmd={cmd} />}
-          {step === "final" && <FinalStep st={st} />}
+          {step === "final" && <FinalStep st={st} cmd={cmd} />}
         </motion.div>
       </AnimatePresence>
 
@@ -265,7 +290,8 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
       {step === "question" ? (
         <div className="actionbar">
           <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
-            ↶<small>Zpět</small>
+            <Undo2 className="act-ic" />
+            <small>Zpět</small>
           </button>
           <button className="btn act-buzz" disabled={st.teams.length === 0} onClick={() => setSheet({ kind: "strike" })}>
             <XIcon className="act-x" />
@@ -273,21 +299,27 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
           </button>
           {unrevealed ? (
             <button className="btn act-next" onClick={() => cmd({ type: "revealAll" })}>
-              👁<small>Odkrýt zbytek</small>
+              <Eye className="act-ic" />
+              <small>Odkrýt zbytek</small>
             </button>
           ) : (
             <button className="btn act-next" onClick={() => cmd({ type: "setView", view: "scoreboard" })}>
-              🏆<small>Pořadí</small>
+              <Trophy className="act-ic" />
+              <small>Pořadí</small>
             </button>
           )}
         </div>
       ) : (
         <div className="actionbar single">
           <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
-            ↶<small>Zpět</small>
+            <Undo2 className="act-ic" />
+            <small>Zpět</small>
           </button>
           <button className="btn btn-y act-primary" onClick={primary.run} disabled={primary.disabled}>
-            {primary.label}
+            <span className="act-primary-row">
+              {primary.icon && <primary.icon className="act-ic" strokeWidth={2.6} />}
+              {primary.label}
+            </span>
             {primary.sub && <small>{primary.sub}</small>}
           </button>
         </div>
@@ -309,7 +341,12 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 }
 
 function Stepper({ st, step }: { st: AdminState; step: Step }) {
-  const items = ["Lobby", "Intro", ...st.questions.map((_, i) => `${i + 1}`), "🏆"];
+  const items: React.ReactNode[] = [
+    "Lobby",
+    "Intro",
+    ...st.questions.map((_, i) => `${i + 1}`),
+    <Trophy key="t" className="stp-ic" />,
+  ];
   const at =
     step === "lobby" ? 0 : step === "intro" ? 1 : step === "final" ? items.length - 1 : 2 + Math.max(0, st.questionIndex);
   return (
@@ -355,7 +392,10 @@ function LobbyStep({ st }: { st: AdminState }) {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.4, opacity: 0 }}
               >
-                {t.emoji} {t.name} <span className={`dot ${t.online ? "on" : ""}`} />
+                <span className="t-ic">
+                  <TeamIcon name={t.icon} />
+                </span>
+                {t.name} <span className={`dot ${t.online ? "on" : ""}`} />
               </motion.span>
             ))}
           </AnimatePresence>
@@ -368,11 +408,13 @@ function LobbyStep({ st }: { st: AdminState }) {
 function IntroStep({ cmd }: { cmd: Cmd }) {
   return (
     <section className="card-a center-card">
-      <span className="step-emoji">🎬</span>
+      <span className="step-ic-wrap">
+        <Clapperboard className="step-ic" />
+      </span>
       <h2 className="step-title">Na projektoru běží intro</h2>
       <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), ohlas první otázku.</p>
       <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "intro" })}>
-        ↺ Přehrát intro znovu
+        <RotateCcw className="btn-ic" /> Přehrát intro znovu
       </button>
     </section>
   );
@@ -405,7 +447,11 @@ function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (
                 <button className={`ans ${rev ? (rev.by ? "done" : "done dim") : ""}`} disabled={!!rev} onClick={() => onFlip(i)}>
                   <span className="ans-n">{i + 1}</span>
                   <span className="ans-t">{a.text}</span>
-                  {by && <span className="ans-by">{by.emoji}</span>}
+                  {by && (
+                    <span className="ans-by t-ic">
+                      <TeamIcon name={by.icon} />
+                    </span>
+                  )}
                   {rev && !rev.by && <span className="ans-by mute">—</span>}
                   <span className="ans-p">{a.points * q.multiplier}</span>
                 </button>
@@ -422,7 +468,9 @@ function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (
             const n = round.strikes[t.id] ?? 0;
             return (
               <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
-                <span>{t.emoji}</span>
+                <span className="t-ic">
+                  <TeamIcon name={t.icon} />
+                </span>
                 <span className="strike-name">{t.name}</span>
                 <span className="mini-x">
                   {Array.from({ length: MAX_STRIKES }, (_, i) => (
@@ -446,7 +494,7 @@ function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (
           {st.buzzer.open
             ? "Otevřeno — kdo zmáčkne první, ukáže se na projektoru."
             : winner
-              ? `První: ${winner.emoji} ${winner.name}`
+              ? `První: ${winner.name}`
               : "Volitelné — souboj „kdo dřív“."}
         </p>
         <div className="row-btns">
@@ -469,7 +517,9 @@ function Ranking({ teams }: { teams: Team[] }) {
       {sorted.map((t, i) => (
         <li key={t.id}>
           <span className="team-rank">{i + 1}.</span>
-          <span>{t.emoji}</span>
+          <span className="t-ic">
+            <TeamIcon name={t.icon} />
+          </span>
           <span className="strike-name">{t.name}</span>
           <b className="y">{t.score}</b>
         </li>
@@ -485,21 +535,35 @@ function ScoresStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
       <Ranking teams={st.teams} />
       {st.round && (
         <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "board" })}>
-          ← Zpět na otázku {st.questionIndex + 1}
+          <ArrowLeft className="btn-ic" /> Zpět na otázku {st.questionIndex + 1}
         </button>
       )}
     </section>
   );
 }
 
-function FinalStep({ st }: { st: AdminState }) {
+function EndShowButton({ cmd }: { cmd: Cmd }) {
+  return (
+    <button
+      className="btn btn-danger btn-block"
+      onClick={() =>
+        confirm("Ukončit show? Smažou se týmy i body a telefon se odpojí. Na projektoru se znovu ukáže admin QR.") &&
+        cmd({ type: "endShow" })
+      }
+    >
+      Ukončit show a vše vynulovat
+    </button>
+  );
+}
+
+function FinalStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
   const winner = [...st.teams].sort((a, b) => b.score - a.score)[0];
   return (
     <section className="card-a center-card">
-      <span className="step-emoji">{winner?.emoji ?? "🏆"}</span>
+      <span className="step-ic-wrap">{winner ? <TeamIcon name={winner.icon} /> : <Trophy className="step-ic" />}</span>
       <h2 className="step-title">Vítěz: {winner?.name ?? "—"}</h2>
       <Ranking teams={st.teams} />
-      <p className="mute small">Novou hru spustíš v ⚙ Nastavení.</p>
+      <EndShowButton cmd={cmd} />
     </section>
   );
 }
@@ -507,7 +571,9 @@ function FinalStep({ st }: { st: AdminState }) {
 function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
   return (
     <details className="card-a adv">
-      <summary>Pokročilé ovládání</summary>
+      <summary>
+        <ChevronDown className="adv-chev" /> Pokročilé ovládání
+      </summary>
       <h3 className="h3">Projektor ukazuje</h3>
       <div className="seg seg5">
         {VIEWS.map(([v, label]) => (
@@ -582,10 +648,12 @@ function TeamSheet({
                 const out = n >= MAX_STRIKES;
                 return (
                   <button key={t.id} className="team-btn" disabled={out} onClick={() => onPick(t.id)}>
-                    <span className="team-btn-em">{t.emoji}</span>
+                    <span className="team-btn-em">
+                      <TeamIcon name={t.icon} />
+                    </span>
                     <span className="team-btn-name">{t.name}</span>
                     <span className="team-btn-meta">
-                      {t.score} b. · {out ? "vyřazen" : `${"✕".repeat(n)}${"·".repeat(MAX_STRIKES - n)}`}
+                      {t.score} b. · {out ? "vyřazen" : n ? `${n}× vedle` : "bez chyby"}
                     </span>
                   </button>
                 );
@@ -620,7 +688,9 @@ function PendingBar({ st, cmd }: { st: AdminState; cmd: Cmd }) {
           transition={{ type: "spring", stiffness: 500, damping: 34 }}
         >
           <div className="pending-row">
-            <span className="pending-label">⏳ {p.label}</span>
+            <span className="pending-label">
+              <Hourglass className="pending-ic" /> {p.label}
+            </span>
             <button className="btn btn-dark" onClick={() => cmd({ type: "cancelPending" })}>
               ZRUŠIT
             </button>
@@ -668,7 +738,9 @@ function TeamsTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         <section className="card-a team-row" key={t.id}>
           <div className="team-row-top">
             <span className="team-rank">{i + 1}.</span>
-            <span className="team-em">{t.emoji}</span>
+            <span className="team-em">
+              <TeamIcon name={t.icon} />
+            </span>
             <button
               className="team-name"
               onClick={() => {
@@ -676,7 +748,7 @@ function TeamsTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
                 if (n && n.trim() !== t.name) cmd({ type: "teamRename", id: t.id, name: n });
               }}
             >
-              {t.name} <span className="mute small">✎</span>
+              {t.name} <Pencil className="pencil-ic" />
             </button>
             <span className={`dot ${t.online ? "on" : ""}`} title={t.online ? "online" : "offline"} />
             <span className="team-score">{t.score}</span>
@@ -691,7 +763,7 @@ function TeamsTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
               className="btn btn-sm btn-danger"
               onClick={() => confirm(`Odstranit tým ${t.name}?`) && cmd({ type: "teamRemove", id: t.id })}
             >
-              🗑
+              <Trash2 className="btn-ic" />
             </button>
           </div>
         </section>
@@ -774,17 +846,22 @@ function SettingsTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 
       <section className="card-a">
         <h3 className="h3">Reset</h3>
+        <p className="mute small">
+          <b>Vynulovat body</b> — týmy zůstanou. <b>Nová hra</b> — smaže týmy, nový kód hry, ty zůstaneš adminem.{" "}
+          <b>Ukončit show</b> — smaže vše a odpojí i tento telefon (na projektoru se znovu ukáže admin QR).
+        </p>
         <div className="row-btns">
           <button className="btn" onClick={() => confirm("Vynulovat body všech týmů?") && cmd({ type: "resetScores" })}>
             Vynulovat body
           </button>
           <button
-            className="btn btn-danger"
+            className="btn"
             onClick={() => confirm("Opravdu novou hru? Smažou se všechny týmy i body.") && cmd({ type: "resetGame" })}
           >
             Nová hra
           </button>
         </div>
+        <EndShowButton cmd={cmd} />
       </section>
 
       <p className="mute small center">Ovládání je spárované s tímto telefonem.</p>

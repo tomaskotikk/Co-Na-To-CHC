@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bubble, Logo } from "@/components/Logo";
 import { CountUp, XIcon } from "@/components/shared";
+import { TeamIcon } from "@/components/TeamIcon";
 import { emitAck, getSocket, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
 import { MAX_STRIKES, type Ack, type PublicState, type Team } from "@/lib/types";
 
@@ -242,12 +243,12 @@ function TeamView({ st, team }: { st: PublicState; team: Team }) {
     st.view === "lobby"
       ? "Jste ve hře! Čekáme, až moderátor spustí show…"
       : st.view === "intro"
-        ? "🎬 Show začíná! Koukejte na projektor 👀"
+        ? "Show začíná! Koukejte na projektor."
         : st.view === "scoreboard"
         ? "Koukejte na projektor — průběžné pořadí!"
         : st.view === "final"
           ? rank === 1
-            ? "🏆 VYHRÁLI JSTE! 🏆"
+            ? "VYHRÁLI JSTE!"
             : `Konec hry — skončili jste ${rank}.`
           : null;
 
@@ -262,7 +263,9 @@ function TeamView({ st, team }: { st: PublicState; team: Team }) {
 
       <section className="tm-hero">
         <Bubble className="tm-em-bubble" tail="58%">
-          <span className="tm-em">{team.emoji}</span>
+          <span className="tm-em">
+            <TeamIcon name={team.icon} />
+          </span>
         </Bubble>
         <h1 className="tm-name">{team.name}</h1>
         <div className="tm-score">
@@ -283,7 +286,7 @@ function TeamView({ st, team }: { st: PublicState; team: Team }) {
         </button>
       ) : winner ? (
         <div className={`tm-card tm-buzz-res ${winner.id === team.id ? "win" : ""}`}>
-          {winner.id === team.id ? "⚡ Byli jste první! Odpovídejte!" : `Rychlejší: ${winner.emoji} ${winner.name}`}
+          {winner.id === team.id ? "Byli jste první! Odpovídejte!" : `Rychlejší: ${winner.name}`}
         </div>
       ) : status ? (
         <div className="tm-card">{status}</div>

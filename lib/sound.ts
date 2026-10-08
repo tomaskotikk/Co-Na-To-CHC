@@ -26,9 +26,19 @@ export const setMuted = (m: boolean) => {
 };
 export const isMuted = () => muted;
 
-type ToneOpts = { type?: OscillatorType; freq: number; to?: number; start?: number; dur: number; vol?: number; attack?: number; filter?: number };
+type ToneOpts = {
+  type?: OscillatorType;
+  freq: number;
+  to?: number;
+  start?: number;
+  dur: number;
+  vol?: number;
+  attack?: number;
+  filter?: number;
+  out?: AudioNode;
+};
 
-function tone({ type = "sine", freq, to, start = 0, dur, vol = 0.3, attack = 0.005, filter }: ToneOpts) {
+function tone({ type = "sine", freq, to, start = 0, dur, vol = 0.3, attack = 0.005, filter, out }: ToneOpts) {
   if (!ctx || !master) return;
   const t0 = ctx.currentTime + start;
   const osc = ctx.createOscillator();
@@ -46,12 +56,12 @@ function tone({ type = "sine", freq, to, start = 0, dur, vol = 0.3, attack = 0.0
     f.frequency.value = filter;
     node = osc.connect(f);
   }
-  node.connect(g).connect(master);
+  node.connect(g).connect(out ?? master);
   osc.start(t0);
   osc.stop(t0 + dur + 0.05);
 }
 
-function noise(start: number, dur: number, vol: number, freq = 2000) {
+function noise(start: number, dur: number, vol: number, freq = 2000, out?: AudioNode) {
   if (!ctx || !master) return;
   const t0 = ctx.currentTime + start;
   const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
@@ -67,7 +77,7 @@ function noise(start: number, dur: number, vol: number, freq = 2000) {
   g.gain.setValueAtTime(0.0001, t0);
   g.gain.exponentialRampToValueAtTime(vol, t0 + dur * 0.3);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(out ?? master);
   src.start(t0);
 }
 
@@ -152,7 +162,44 @@ function crash() {
   tone({ type: "triangle", freq: 140, to: 70, dur: 0.5, vol: 0.25 });
 }
 
-export const sfx = { correct, wrong, intro, revealAll, pop, buzz, fanfare, tick, drumroll, crash };
+/** tiché otočení karty při „Odkrýt zbytek“ */
+function softFlip() {
+  noise(0, 0.14, 0.05, 1200);
+  tone({ type: "triangle", freq: 659.25, start: 0.05, dur: 0.35, vol: 0.14 });
+  tone({ freq: 1318.5, start: 0.05, dur: 0.25, vol: 0.05 });
+}
+
+/**
+ * Napětí během prodlevy: zrychlující tlukot srdce + stoupající hučení.
+ * Vrací funkci, která vše rychle ztlumí (přijde trefa nebo X).
+ */
+export function startSuspense(maxSec = 6) {
+  if (!ctx || !master || muted) return () => {};
+  const bus = ctx.createGain();
+  bus.gain.value = 1;
+  bus.connect(master);
+  let t = 0.05;
+  let gap = 0.62;
+  while (t < maxSec) {
+    const p = t / maxSec;
+    // „lub-dub“
+    tone({ freq: 62, to: 40, start: t, dur: 0.16, vol: 0.5 + p * 0.3, out: bus });
+    tone({ freq: 58, to: 38, start: t + 0.17, dur: 0.14, vol: 0.32 + p * 0.25, out: bus });
+    t += gap;
+    gap = Math.max(0.3, gap * 0.9);
+  }
+  // stoupající drone
+  tone({ type: "sawtooth", freq: 55, to: 220, dur: maxSec, vol: 0.07, attack: 0.6, filter: 700, out: bus });
+  tone({ type: "sine", freq: 110, to: 440, dur: maxSec, vol: 0.05, attack: 0.6, out: bus });
+  return () => {
+    if (!ctx) return;
+    bus.gain.cancelScheduledValues(ctx.currentTime);
+    bus.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
+    setTimeout(() => bus.disconnect(), 400);
+  };
+}
+
+export const sfx = { correct, wrong, intro, revealAll, pop, buzz, fanfare, tick, drumroll, crash, softFlip };
 
 export function play(name: keyof typeof sfx) {
   if (!ctx || muted) return;

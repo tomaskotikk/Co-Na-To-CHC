@@ -1268,3 +1268,185 @@
 @keyframes qIn {
   from { opacity: 0; transform: scale(0.8) translateY(-20px); }
 }
+
+/* ═════════ IKONY ═════════ */
+
+.em {
+  color: var(--ink);
+}
+.pill-ic {
+  width: 1.25em;
+  height: 1.25em;
+}
+.inline-ic {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+.card-by {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 3.4);
+  height: calc(var(--u) * 3.4);
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--y);
+  filter: none;
+}
+.buzz-em {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 17);
+  height: calc(var(--u) * 17);
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+  margin-bottom: calc(var(--u) * 2);
+  box-shadow: 0 0 0 calc(var(--u) * 0.6) var(--ink), 0 0 0 calc(var(--u) * 1) var(--y);
+}
+.pod-em {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 8);
+  border-radius: 50%;
+  background: var(--ink-3);
+  color: var(--y);
+  border: calc(var(--u) * 0.3) solid var(--y);
+}
+.pod.first .pod-em {
+  width: calc(var(--u) * 13);
+  height: calc(var(--u) * 13);
+  background: var(--y);
+  color: var(--ink);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 calc(var(--u) * 0.4) var(--y), 0 0 6vh rgba(255, 213, 0, 0.5);
+}
+
+/* ═════════ NAPĚTÍ (běží prodleva) ═════════ */
+
+.stage .view {
+  transition: filter 0.45s ease;
+}
+.stage.suspense .view {
+  filter: brightness(0.42) saturate(0.6);
+}
+.suspense-ov {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(255, 213, 0, 0.08) 0, transparent 30%, rgba(0, 0, 0, 0.75) 80%);
+  animation: susIn 0.35s ease both;
+}
+@keyframes susIn {
+  from { opacity: 0; }
+}
+.suspense-bubble {
+  --bw: calc(var(--u) * 0.6);
+  --bubble-bg: var(--ink);
+  padding: calc(var(--u) * 1.2) calc(var(--u) * 3.6) calc(var(--u) * 0.2);
+  animation: heartbeat 0.62s ease-in-out infinite;
+  box-shadow: 0 0 8vh rgba(255, 213, 0, 0.35);
+}
+.suspense-q {
+  display: block;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 12);
+  line-height: 1;
+  color: var(--y);
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.13); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.07); }
+}
+
+/* razítko po třetím X */
+.stamp {
+  width: fit-content;
+  margin: calc(var(--u) * 2.4) auto 0;
+  padding: 0.12em 0.45em 0;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 6.5);
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--y);
+  border: calc(var(--u) * 0.55) solid var(--y);
+  border-radius: calc(var(--u) * 0.6);
+  transform: rotate(-7deg);
+  animation: stampIn 0.45s 0.35s var(--ease-back) both;
+}
+@keyframes stampIn {
+  from { opacity: 0; transform: rotate(-7deg) scale(2.6); }
+}
+
+/* ═════════ FINÁLE — dramatické vyhlášení ═════════ */
+
+.confetti i {
+  animation-delay: var(--d, 0s);
+}
+.final.live .confetti i {
+  animation-delay: calc(var(--t1) + var(--d, 0s));
+  animation-fill-mode: backwards;
+}
+.final.live .confetti i {
+  opacity: 1;
+}
+.final-pre {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  translate: 0 -50%;
+  z-index: 4;
+  font-family: var(--font-d);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: calc(var(--u) * 4.2);
+  color: var(--white);
+  animation: finalPre 3s 0.2s var(--ease-out) both;
+  pointer-events: none;
+}
+@keyframes finalPre {
+  0% { opacity: 0; transform: scale(0.9); letter-spacing: 0.3em; }
+  20% { opacity: 1; transform: none; letter-spacing: 0.08em; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+.flash-full {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 25;
+}
+.final.live .flash-full {
+  animation: flash 0.9s var(--t1) ease-out both;
+}
+.final.live .pod {
+  animation: podIn 0.8s var(--ease-back) both;
+}
+.final.live .pod.p3 { animation-delay: var(--t3); }
+.final.live .pod.p2 { animation-delay: var(--t2); }
+.final.live .pod.p1 { animation-delay: var(--t1); }
+.final.live .pod.p3 .pod-block { animation-delay: var(--t3); }
+.final.live .pod.p2 .pod-block { animation-delay: var(--t2); }
+.final.live .pod.p1 .pod-block { animation-delay: var(--t1); }
+.final.live .final-kicker {
+  animation: rise2 0.7s var(--t1) var(--ease-out) both;
+}
+.pod-block {
+  animation-delay: 0s;
+}
+@keyframes podIn {
+  from { opacity: 0; transform: translateY(60px) scale(0.85); }
+}

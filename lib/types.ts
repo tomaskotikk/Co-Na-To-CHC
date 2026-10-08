@@ -10,10 +10,30 @@ export type Question = {
   multiplier: number;
 };
 
+export const TEAM_ICONS = [
+  "rocket",
+  "flame",
+  "crown",
+  "ghost",
+  "zap",
+  "gem",
+  "cat",
+  "dog",
+  "bird",
+  "fish",
+  "rabbit",
+  "turtle",
+  "squirrel",
+  "bug",
+  "star",
+  "coffee",
+] as const;
+export type TeamIconName = (typeof TEAM_ICONS)[number];
+
 export type Team = {
   id: string;
   name: string;
-  emoji: string;
+  icon: TeamIconName;
   score: number;
   online: boolean;
 };
@@ -77,6 +97,8 @@ export type PublicState = {
   round: Round | null;
   buzzer: Buzzer;
   fx: Fx;
+  /** admin právě něco odklepl a běží prodleva — projektor stupňuje napětí (neví co) */
+  suspense: boolean;
   /** ručně nastavená veřejná adresa (prázdné = automaticky) */
   manualUrl: string;
   /** adresa notebooku v lokální síti */
@@ -109,7 +131,8 @@ export type AdminCmd =
   | { type: "saveQuestions"; questions: Question[] }
   | { type: "settings"; settings: Partial<Settings> }
   | { type: "resetScores" }
-  | { type: "resetGame" };
+  | { type: "resetGame" }
+  | { type: "endShow" };
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 

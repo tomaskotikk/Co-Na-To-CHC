@@ -1,4 +1,4 @@
-# Co na to CHC? 🎤
+# Co na to CHC?
 
 Stužkovací show Creative Hill College ve stylu „Co na to Češi“.
 Notebook = projektor, tvůj telefon = ovladač, telefony týmů = připojení přes QR.
@@ -25,9 +25,21 @@ Pak na notebooku otevři **http://localhost:3000** (důležité: `localhost`, je
 4. Někdo se trefí → klepni na odpověď → vyber tým → karta se otočí a tým dostane body.
 5. Netrefí se → **BZZZ** → vyber tým → bzučák + velké X. Po 3 X je tým pro otázku vyřazený.
 6. Každá akce má **2 s prodlevu** s tlačítkem **ZRUŠIT** (nastavitelné v ⚙). Navíc **↶ Zpět** vrátí poslední akci.
-7. „Odkrýt zbytek“ ukáže neuhodnuté karty (bez bodů). Pak **›** další otázka, nakonec Pořadí a Finále 🏆.
+7. „Odkrýt zbytek“ ukáže neuhodnuté karty (bez bodů). Pak **›** další otázka, nakonec Pořadí a Finále.
 
 Volitelně: **Bzučáky** – týmům se na telefonu objeví velké tlačítko, kdo zmáčkne první, ukáže se na projektoru.
+
+## Nová hra / reset
+
+Server běží dál, i když zavřeš prohlížeč — hra „visí“ ve stavu, kde jsi skončil. Proto:
+
+| Tlačítko (admin) | Co udělá |
+|---|---|
+| ⚙ › **Vynulovat body** | body na 0, týmy zůstanou |
+| ⚙ › **Nová hra** | smaže týmy i body, nový kód hry, ty zůstaneš adminem |
+| ⚙ › **Ukončit show a vše vynulovat** (i na konci po vyhlášení) | smaže vše a odpojí admin telefon — projektor znovu ukáže admin QR |
+
+Na Renderu free se navíc server po ~15 min bez návštěvy uspí a při probuzení začne úplně načisto (nový admin QR).
 
 ## Otázky
 

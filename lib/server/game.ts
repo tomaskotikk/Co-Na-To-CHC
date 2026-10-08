@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import {
+  TEAM_ICONS,
   MAX_STRIKES,
   MAX_TEAMS,
   type Ack,
@@ -23,7 +24,6 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "game.json");
 const QUESTIONS_FILE = path.join(DATA_DIR, "questions.json");
 
-const EMOJIS = ["🦊", "🐸", "🦁", "🐼", "🐙", "🦄", "🐝", "🐺", "🦖", "🐧", "🦉", "🐯", "🐨", "🦩", "🐬", "🦔"];
 
 type Persisted = {
   adminToken: string;
@@ -166,12 +166,16 @@ export class Game {
       adminToken: saved?.adminToken ?? id(12),
       adminSession: saved?.adminSession ?? null,
       joinCode: saved?.joinCode ?? code4(),
-      teams: (saved?.teams ?? []).map((t) => ({ ...t, online: false })),
+      teams: (saved?.teams ?? []).map((t, i) => ({
+        ...t,
+        icon: TEAM_ICONS.includes(t.icon) ? t.icon : TEAM_ICONS[i % TEAM_ICONS.length],
+        online: false,
+      })),
       view: saved?.view ?? "lobby",
       questionIndex: saved?.questionIndex ?? -1,
       round: saved?.round ?? null,
       settings: {
-        delayMs: 2000,
+        delayMs: 2500,
         baseUrl: "",
         ...saved?.settings,
         ...(process.env.PUBLIC_URL ? { baseUrl: process.env.PUBLIC_URL.replace(/\/+$/, "") } : {}),
@@ -326,9 +330,9 @@ export class Game {
   }
 
   private createTeam(name: string): Team {
-    const used = new Set(this.s.teams.map((t) => t.emoji));
-    const emoji = EMOJIS.find((e) => !used.has(e)) ?? EMOJIS[this.s.teams.length % EMOJIS.length];
-    const team: Team = { id: id(), name, emoji, score: 0, online: false };
+    const used = new Set(this.s.teams.map((t) => t.icon));
+    const icon = TEAM_ICONS.find((e) => !used.has(e)) ?? TEAM_ICONS[this.s.teams.length % TEAM_ICONS.length];
+    const team: Team = { id: id(), name, icon, score: 0, online: false };
     this.s.teams.push(team);
     return team;
   }
@@ -366,7 +370,7 @@ export class Game {
         if (!q.answers[cmd.index]) return "Karta neexistuje.";
         if (this.s.round.revealed[cmd.index]) return "Karta už je otočená.";
         const team = cmd.teamId ? this.s.teams.find((t) => t.id === cmd.teamId) : null;
-        const label = `Otočit #${cmd.index + 1}${team ? ` → ${team.emoji} ${team.name}` : " (bez bodů)"}`;
+        const label = `Otočit #${cmd.index + 1}${team ? ` → ${team.name}` : " (bez bodů)"}`;
         this.schedule(label, () => {
           const round = this.s.round;
           if (!round || round.questionId !== q.id || round.revealed[cmd.index]) return;
@@ -383,7 +387,7 @@ export class Game {
         const team = this.s.teams.find((t) => t.id === cmd.teamId);
         if (!team || !this.s.round) return "Tým nebo otázka neexistuje.";
         if ((this.s.round.strikes[team.id] ?? 0) >= MAX_STRIKES) return "Tým už má 3 pokusy pryč.";
-        this.schedule(`BZZZ ✕ ${team.emoji} ${team.name}`, () => {
+        this.schedule(`BZZZ → ${team.name}`, () => {
           const round = this.s.round;
           if (!round || !this.s.teams.some((t) => t.id === team.id)) return;
           const count = Math.min(MAX_STRIKES, (round.strikes[team.id] ?? 0) + 1);
@@ -521,6 +525,26 @@ export class Game {
         });
         return null;
       }
+      case "endShow": {
+        // vše vynulovat a odpárovat admina — projektor znovu ukáže admin QR
+        this.cancelPendingSilently();
+        this.s.teams = [];
+        this.s.view = "lobby";
+        this.s.questionIndex = -1;
+        this.s.round = null;
+        this.s.joinCode = code4();
+        this.buzzer = { open: false, winner: null };
+        this.undoStack = [];
+        this.teamSockets.clear();
+        this.io.to("teams").emit("team:removed", "*");
+        this.s.adminToken = id(12);
+        this.s.adminSession = null;
+        this.io.to("admins").emit("admin:kicked", "ended");
+        this.io.in("admins").socketsLeave("admins");
+        this.io.to("screens-local").emit("pairing", { adminPath: this.adminPath });
+        this.changed();
+        return null;
+      }
       case "resetGame": {
         this.cancelPendingSilently();
         this.s.teams = [];
@@ -610,6 +634,7 @@ export class Game {
       round,
       buzzer: this.buzzer,
       fx: this.fx,
+      suspense: this.pending !== null,
       manualUrl: this.s.settings.baseUrl,
       lanUrl: this.lanUrls[0] ?? `http://localhost:${this.port}`,
     };

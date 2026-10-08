@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Play, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AdminCmd, AdminState, Question } from "@/lib/types";
 
@@ -95,7 +96,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
               <span className="qedit-t">{q.text || <i className="mute">Bez textu</i>}</span>
               {live && <span className="tag live">●</span>}
               {q.multiplier > 1 && <span className="mult">×{q.multiplier}</span>}
-              <span className="chev">{isOpen ? "▴" : "▾"}</span>
+              <span className="chev">{isOpen ? <ChevronUp className="btn-ic" /> : <ChevronDown className="btn-ic" />}</span>
             </button>
 
             {isOpen && (
@@ -144,7 +145,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
                         aria-label="Smazat odpověď"
                         onClick={() => update((d) => d[qi].answers.splice(ai, 1))}
                       >
-                        ×
+                        <X className="btn-ic" />
                       </button>
                     </div>
                   ))}
@@ -159,21 +160,23 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
                     className="btn btn-sm"
                     disabled={qi === 0}
                     onClick={() => update((d) => d.splice(qi - 1, 0, ...d.splice(qi, 1)))}
+                    aria-label="Posunout nahoru"
                   >
-                    ↑
+                    <ArrowUp className="btn-ic" />
                   </button>
                   <button
                     className="btn btn-sm"
                     disabled={qi === draft.length - 1}
                     onClick={() => update((d) => d.splice(qi + 1, 0, ...d.splice(qi, 1)))}
+                    aria-label="Posunout dolů"
                   >
-                    ↓
+                    <ArrowDown className="btn-ic" />
                   </button>
                   <button
                     className="btn btn-sm btn-danger"
                     onClick={() => confirm("Smazat otázku?") && update((d) => d.splice(qi, 1))}
                   >
-                    Smazat
+                    <Trash2 className="btn-ic" /> Smazat
                   </button>
                   <button
                     className="btn btn-sm btn-y"
@@ -184,7 +187,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
                       if (idx >= 0 && (await cmd({ type: "goto", index: idx }))) onPlay();
                     }}
                   >
-                    ▶ Hrát
+                    <Play className="btn-ic" /> Hrát
                   </button>
                 </div>
               </div>

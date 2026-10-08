@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bubble, Logo } from "@/components/Logo";
 import { Qr } from "@/components/Qr";
 import { BigX, CountUp, XIcon } from "@/components/shared";
+import { TeamIcon } from "@/components/TeamIcon";
+import { Smartphone, Volume2, VolumeX } from "lucide-react";
 import { getSocket, resolveBaseUrl, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { audioReady, isMuted, play, setMuted, unlockAudio } from "@/lib/sound";
+import { audioReady, isMuted, play, setMuted, startSuspense, unlockAudio } from "@/lib/sound";
 import { MAX_STRIKES, type Fx, type PublicState, type Team } from "@/lib/types";
 
 type Overlay =
@@ -66,6 +68,11 @@ export function Screen() {
         break;
       case "flip":
         setTimeout(() => play("correct"), 120);
+        stageRef.current?.animate([{ transform: "scale(1)" }, { transform: "scale(1.012)" }, { transform: "scale(1)" }], {
+          duration: 600,
+          delay: 250,
+          easing: "cubic-bezier(.16,1,.3,1)",
+        });
         break;
       case "strike": {
         const t = team(fx.teamId);
@@ -78,7 +85,7 @@ export function Screen() {
         break;
       }
       case "revealAll":
-        play("revealAll");
+        // zvuky jednotlivých karet řeší Board
         break;
       case "buzz": {
         const t = team(fx.teamId);
@@ -90,7 +97,7 @@ export function Screen() {
         play("pop");
         break;
       case "final":
-        play("fanfare");
+        // časování zvuků řeší Final
         break;
       case "undo":
         play("tick");
@@ -99,6 +106,14 @@ export function Screen() {
         break;
     }
   }, [st, showOverlay]);
+
+  // napětí: admin odklepl akci a běží prodleva — projektor neví, jestli přijde trefa nebo X
+  const suspense = !!st?.suspense && st.view === "board";
+  useEffect(() => {
+    if (!suspense) return;
+    const stop = startSuspense();
+    return stop;
+  }, [suspense]);
 
   // zvuk smí začít až po interakci; F = fullscreen, M = ztlumit, Shift+A = nový admin QR
   useEffect(() => {
@@ -130,7 +145,7 @@ export function Screen() {
   const base = st ? resolveBaseUrl(st) : "";
 
   return (
-    <main className="stage" ref={stageRef}>
+    <main className={`stage ${suspense ? "suspense" : ""}`} ref={stageRef}>
       <Backdrop />
 
       {st && (
@@ -171,7 +186,7 @@ export function Screen() {
             )}
             {st.view === "final" && (
               <motion.div key="final" className="view" {...viewMotion}>
-                <Final teams={st.teams} />
+                <Final teams={st.teams} live={lastFx?.kind === "final"} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -194,8 +209,9 @@ export function Screen() {
                     <BigX key={i} className="big-x" style={{ animationDelay: `${i * 90}ms` }} />
                   ))}
                 </div>
+                {overlay.count >= MAX_STRIKES && <div className="stamp">Vyřazeni</div>}
                 <div className="strike-label">
-                  {overlay.team.emoji} {overlay.team.name}
+                  {overlay.team.name}
                   <small>{overlay.count >= MAX_STRIKES ? "Konec pokusů — vyřazeni!" : `${overlay.count}. pokus vedle`}</small>
                 </div>
               </div>
@@ -206,10 +222,20 @@ export function Screen() {
             <div className="overlay buzz-ov" key={overlay.key}>
               <div className="rays" />
               <div className="buzz-inner">
-                <span className="buzz-em">{overlay.team.emoji}</span>
+                <span className="buzz-em">
+                  <TeamIcon name={overlay.team.icon} />
+                </span>
                 <span className="buzz-name">{overlay.team.name}</span>
                 <span className="buzz-sub">byli první!</span>
               </div>
+            </div>
+          )}
+
+          {suspense && (
+            <div className="suspense-ov" aria-hidden>
+              <Bubble className="suspense-bubble" tail="46%">
+                <span className="suspense-q">?</span>
+              </Bubble>
             </div>
           )}
 
@@ -218,8 +244,16 @@ export function Screen() {
       )}
 
       {!connected && <div className="pill conn-lost">Připojuji k serveru…</div>}
-      {!audioOn && <div className="pill y hint">🔊 Klikni kamkoli pro zapnutí zvuku · F = celá obrazovka</div>}
-      {audioOn && muted && <div className="pill hint">🔇 Ztlumeno (M)</div>}
+      {!audioOn && (
+        <div className="pill y hint">
+          <Volume2 className="pill-ic" /> Klikni kamkoli pro zapnutí zvuku · F = celá obrazovka
+        </div>
+      )}
+      {audioOn && muted && (
+        <div className="pill hint">
+          <VolumeX className="pill-ic" /> Ztlumeno (M)
+        </div>
+      )}
       <div className="grain" />
     </main>
   );
@@ -301,7 +335,7 @@ function Lobby({ st, base }: { st: PublicState; base: string }) {
           <AnimatePresence>
             {st.teams.length === 0 && (
               <motion.span className="lobby-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                Zatím nikdo… naskenujte QR kód 📱
+                Zatím nikdo… naskenujte QR kód <Smartphone className="inline-ic" />
               </motion.span>
             )}
             {st.teams.map((t) => (
@@ -314,7 +348,9 @@ function Lobby({ st, base }: { st: PublicState; base: string }) {
                 exit={{ opacity: 0, scale: 0.5 }}
                 transition={{ type: "spring", stiffness: 500, damping: 22 }}
               >
-                <span className="em">{t.emoji}</span>
+                <span className="em">
+                  <TeamIcon name={t.icon} />
+                </span>
                 {t.name}
               </motion.span>
             ))}
@@ -330,6 +366,8 @@ function Lobby({ st, base }: { st: PublicState; base: string }) {
 
 // ───────────────────────────── DESKA ─────────────────────────────
 
+const REVEAL_STEP_MS = 650;
+
 function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
   const q = st.question!;
   const round = st.round!;
@@ -338,6 +376,30 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
   const flipFx = fx?.kind === "flip" ? fx : null;
   // po ohlášení otázky naskočí bublina a karty až za žlutým stěračem
   const entering = fx?.kind === "intro" && fx.number === q.number;
+
+  // „Odkrýt zbytek“: karty se otáčí postupně od nejméně častých až k #1
+  // st.fx (ne lastFx) — musí to být ve stejném vykreslení, kdy přijdou odkryté karty
+  const prevRevealed = useRef(round.revealed);
+  const liveFx = st.fx;
+  const lateOrder = useMemo(() => {
+    const order = new Map<number, number>();
+    if (liveFx.kind !== "revealAll") return order;
+    const fresh = round.revealed
+      .map((r, i) => (r && !prevRevealed.current[i] ? i : -1))
+      .filter((i) => i >= 0)
+      .reverse();
+    fresh.forEach((idx, k) => order.set(idx, k));
+    return order;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveFx.id]);
+  useEffect(() => {
+    prevRevealed.current = round.revealed;
+  });
+  useEffect(() => {
+    if (lateOrder.size === 0) return;
+    const timers = [...lateOrder.values()].map((k) => setTimeout(() => play("softFlip"), 250 + k * REVEAL_STEP_MS));
+    return () => timers.forEach(clearTimeout);
+  }, [lateOrder]);
 
   return (
     <section className={`board ${entering ? "enter" : ""}`}>
@@ -354,13 +416,14 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
           const info = round.revealed[i];
           const by = info?.by ? teamById.get(info.by) : undefined;
           const justFlipped = flipFx?.index === i;
+          const late = lateOrder.get(i);
           return (
             <div
               key={i}
               className={`card ${a ? "open" : ""} ${justFlipped ? "flash" : ""}`}
               style={{ ["--i" as string]: i }}
             >
-              <div className="card-inner">
+              <div className="card-inner" style={late !== undefined ? { transitionDelay: `${late * REVEAL_STEP_MS}ms` } : undefined}>
                 <div className="card-face card-front">
                   <Bubble className="card-num" tail="34%">
                     {i + 1}
@@ -371,7 +434,11 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
                     <>
                       <span className="card-rank">{i + 1}</span>
                       <span className="card-text">{a.text}</span>
-                      {by && <span className="card-by">{by.emoji}</span>}
+                      {by && (
+                        <span className="card-by">
+                          <TeamIcon name={by.icon} />
+                        </span>
+                      )}
                       <span className="card-pts">{a.points}</span>
                     </>
                   )}
@@ -401,7 +468,9 @@ function TeamBar({ st, fx }: { st: PublicState; fx: Fx | null }) {
         const n = strikes[t.id] ?? 0;
         return (
           <motion.div layout key={t.id} className={`chip ${n >= MAX_STRIKES ? "out" : ""} ${t.online ? "" : "offline"}`}>
-            <span className="em">{t.emoji}</span>
+            <span className="em">
+                  <TeamIcon name={t.icon} />
+                </span>
             <span className="chip-name">{t.name}</span>
             <div className="chip-row">
               <span className="chip-score">
@@ -448,10 +517,12 @@ function Scoreboard({ teams }: { teams: Team[] }) {
             className="score-row"
             initial={{ opacity: 0, x: -60 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.08, type: "spring", stiffness: 260, damping: 26 }}
+            transition={{ delay: (sorted.length - 1 - i) * 0.18, type: "spring", stiffness: 260, damping: 26 }}
           >
             <span className="score-rank">{i + 1}.</span>
-            <span className="em">{t.emoji}</span>
+            <span className="em">
+                  <TeamIcon name={t.icon} />
+                </span>
             <div className="score-track">
               <div className="score-fill" style={{ width: `${pct(t.score)}%` }} />
               {[false, true].map((onFill) => (
@@ -477,9 +548,24 @@ function Scoreboard({ teams }: { teams: Team[] }) {
 
 // ───────────────────────────── FINÁLE ─────────────────────────────
 
-function Final({ teams }: { teams: Team[] }) {
+function Final({ teams, live }: { teams: Team[]; live: boolean }) {
   const sorted = [...teams].sort((a, b) => b.score - a.score);
   const [first, second, third] = sorted;
+
+  // 3. místo → 2. místo → buben → vítěz
+  useEffect(() => {
+    if (!live) return;
+    const timers = [
+      setTimeout(() => play("tick"), 0),
+      setTimeout(() => play("pop"), FINAL_T.third * 1000),
+      setTimeout(() => play("pop"), FINAL_T.second * 1000),
+      setTimeout(() => play("drumroll"), FINAL_T.roll * 1000),
+      setTimeout(() => play("crash"), FINAL_T.first * 1000),
+      setTimeout(() => play("fanfare"), FINAL_T.first * 1000 + 150),
+    ];
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
   const pieces = useMemo(
     () =>
       Array.from({ length: 90 }, (_, i) => ({
@@ -503,7 +589,13 @@ function Final({ teams }: { teams: Team[] }) {
   }
 
   return (
-    <section className="final">
+    <section className={`final ${live ? "live" : ""}`} style={finalVars}>
+      {live && (
+        <p className="final-pre" aria-hidden>
+          A vítězem stužkovací show se stává…
+        </p>
+      )}
+      <div className="flash-full" aria-hidden />
       <div className="confetti" aria-hidden>
         {pieces.map((p, i) => (
           <i
@@ -514,7 +606,7 @@ function Final({ teams }: { teams: Team[] }) {
               borderRadius: p.round ? "50%" : "2px",
               outline: p.color === "#0b0b0b" ? "1px solid #ffd500" : undefined,
               animationDuration: `${p.dur}s`,
-              animationDelay: `${p.delay}s`,
+              ["--d" as string]: `${p.delay}s`,
               ["--dx" as string]: p.dx,
               ["--rot" as string]: p.rot,
             }}
@@ -531,13 +623,22 @@ function Final({ teams }: { teams: Team[] }) {
   );
 }
 
+const FINAL_T = { third: 3.2, second: 4.6, roll: 5.6, first: 8.0 };
+const finalVars = {
+  ["--t3" as string]: `${FINAL_T.third}s`,
+  ["--t2" as string]: `${FINAL_T.second}s`,
+  ["--t1" as string]: `${FINAL_T.first}s`,
+} as React.CSSProperties;
+
 function Pod({ t, place, h }: { t?: Team; place: number; h: number }) {
   if (!t) return <div className="pod" />;
   return (
-    <div className={`pod ${place === 1 ? "first" : ""}`}>
-      <span className="pod-em">{t.emoji}</span>
+    <div className={`pod p${place} ${place === 1 ? "first" : ""}`}>
+      <span className="pod-em">
+        <TeamIcon name={t.icon} />
+      </span>
       <span className="pod-name">{t.name}</span>
-      <div className="pod-block" style={{ height: `calc(var(--u) * ${h})`, animationDelay: `${(3 - place) * 0.35}s` }}>
+      <div className="pod-block" style={{ height: `calc(var(--u) * ${h})` }}>
         <span>
           {place}.<small>{t.score} bodů</small>
         </span>
@@ -577,7 +678,9 @@ function ShowIntro({ teams, live }: { teams: Team[]; live: boolean }) {
         <div className="si-chips">
           {teams.map((t, i) => (
             <span key={t.id} className="lobby-chip si-chip" style={{ ["--i" as string]: i }}>
-              <span className="em">{t.emoji}</span>
+              <span className="em">
+                  <TeamIcon name={t.icon} />
+                </span>
               {t.name}
             </span>
           ))}

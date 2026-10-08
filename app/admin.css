@@ -920,9 +920,18 @@ kbd {
   text-align: center;
   padding: 26px 18px;
 }
-.step-emoji {
-  font-size: 54px;
-  line-height: 1;
+.step-ic-wrap {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+}
+.step-ic-wrap svg {
+  width: 55%;
+  height: 55%;
 }
 .step-title {
   font-family: var(--font-d);
@@ -978,11 +987,14 @@ kbd {
   color: var(--mute);
   list-style: none;
 }
-.adv summary::before {
-  content: "▸ ";
+.adv-chev {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  transition: transform 0.2s;
 }
-.adv[open] summary::before {
-  content: "▾ ";
+.adv[open] .adv-chev {
+  transform: rotate(180deg);
 }
 .seg5 {
   grid-template-columns: repeat(5, 1fr);
@@ -1005,4 +1017,81 @@ kbd {
 }
 .jump.on {
   border-color: var(--y);
+}
+
+/* ───── ikony ───── */
+
+.tab-ic {
+  width: 19px;
+  height: 19px;
+  display: block;
+  margin: 0 auto;
+}
+.act-ic {
+  width: 26px;
+  height: 26px;
+}
+.act-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stp-ic {
+  width: 14px;
+  height: 14px;
+  display: block;
+  margin: 0 auto;
+}
+.btn-ic {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.pending-ic {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+}
+.pencil-ic {
+  width: 14px;
+  height: 14px;
+  color: var(--mute);
+  vertical-align: -1px;
+}
+.t-ic {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+  flex: none;
+}
+.t-ic .ti {
+  width: 62%;
+  height: 62%;
+}
+.ans-by.t-ic {
+  margin-right: 2px;
+}
+.team-btn-em,
+.team-em {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+  flex: none;
+}
+.team-em {
+  width: 34px;
+  height: 34px;
+}
+.team-btn-em .ti,
+.team-em .ti {
+  width: 60%;
+  height: 60%;
 }
