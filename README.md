@@ -14,7 +14,8 @@ Poprvé: `npm install`
 
 Pak na notebooku otevři **http://localhost:3000** (důležité: `localhost`, jen tam se ukáže admin QR).
 
-- **F** – celá obrazovka · **M** – ztlumit · **Shift+A** – nový admin QR (když ti umře telefon)
+- **F** – celá obrazovka · **M** – ztlumit · **T** – zvuková zkouška · **Shift+A** – nový admin QR (když ti umře telefon)
+- Vlastní zvuky: dej mp3 do `public/sounds/` (jména v `public/sounds/README.md`), nahradí vestavěné.
 - Jednou klikni kamkoli na projektoru → zapne se zvuk (prohlížeč to vyžaduje).
 
 ## Průběh

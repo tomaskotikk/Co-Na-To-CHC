@@ -8,7 +8,7 @@ import { BigX, CountUp, XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
 import { Smartphone, Volume2, VolumeX } from "lucide-react";
 import { getSocket, resolveBaseUrl, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { audioReady, isMuted, play, setMuted, startSuspense, unlockAudio } from "@/lib/sound";
+import { audioReady, isMuted, measure, play, setMuted, soundCheck, startSuspense, unlockAudio } from "@/lib/sound";
 import { MAX_STRIKES, type Fx, type PublicState, type Team } from "@/lib/types";
 
 type Overlay =
@@ -107,6 +107,13 @@ export function Screen() {
     }
   }, [st, showOverlay]);
 
+  // automatická kontrola hlasitosti zvuků (?debug)
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has("debug")) {
+      (window as unknown as { __measure: typeof measure }).__measure = measure;
+    }
+  }, []);
+
   // napětí: admin odklepl akci a běží prodleva — projektor neví, jestli přijde trefa nebo X
   const suspense = !!st?.suspense && st.view === "board";
   useEffect(() => {
@@ -130,6 +137,8 @@ export function Screen() {
       } else if (k === "m") {
         setMuted(!isMuted());
         setMutedState(isMuted());
+      } else if (k === "t") {
+        soundCheck();
       } else if (k === "a" && e.shiftKey) {
         if (confirm("Odpojit současného admina a ukázat nový QR kód?")) getSocket().emit("screen:repair");
       }

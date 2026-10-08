@@ -839,6 +839,9 @@ function SettingsTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
             <kbd>M</kbd> ztlumit zvuk
           </li>
           <li>
+            <kbd>T</kbd> zvuková zkouška (přehraje všechny zvuky)
+          </li>
+          <li>
             <kbd>Shift</kbd>+<kbd>A</kbd> nový admin QR kód
           </li>
         </ul>
