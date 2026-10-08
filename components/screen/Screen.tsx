@@ -295,7 +295,6 @@ function Pairing({ adminUrl }: { adminUrl: string | null }) {
                   <span>.</span>
                 </span>
               </h2>
-              <p>Admin QR se zobrazí jen na notebooku (localhost) nebo s klíčem v adrese: …/?klic=TVŮJ_KLÍČ</p>
             </>
           )}
         </div>
