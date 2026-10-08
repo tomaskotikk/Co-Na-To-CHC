@@ -15,6 +15,7 @@ Když sem dáš soubor s jedním z těchto jmen (mp3 / ogg / wav / m4a), přehra
 | `buzz.mp3` | tým zmáčkl bzučák na telefonu |
 | `pop.mp3` | tým se připojil |
 | `tick.mp3` | krok zpět |
+| `applause.mp3` | potlesk po trefě a u vítěze (vestavěný není — hraje jen když ho sem dáš) |
 
 Zvuky musí být tvoje nebo s licencí, která povoluje použití (např. Pixabay, Mixkit, freesound CC0).
 Po přidání souborů je pushni na GitHub — Render je nasadí s aplikací.

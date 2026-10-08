@@ -1026,6 +1026,7 @@
 }
 .x-row {
   display: flex;
+  justify-content: center;
   gap: calc(var(--u) * 2);
 }
 .big-x {

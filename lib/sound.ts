@@ -178,69 +178,13 @@ function bell(t0: number, f: number, vol: number, out: AudioNode) {
   noise(t0, 0.02, out, vol * 0.25, "highpass", 6000); // úder paličky
 }
 
-/** potlesk publika — stovky náhodných tlesknutí, předpočítané do bufferu */
-function applause(seconds: number, vol: number, t0 = 0) {
-  const c = ctx!;
-  const sr = c.sampleRate;
-  const len = Math.floor(sr * seconds);
-  const buf = c.createBuffer(2, len, sr);
-  const density = 160; // tlesknutí za sekundu
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    const claps = Math.floor(density * seconds);
-    for (let k = 0; k < claps; k++) {
-      const at = Math.floor(Math.random() * len);
-      const p = at / len;
-      // náběh 0.3 s, pak drží, na konci doznívá
-      const shape = Math.min(1, p * seconds / 0.3) * Math.min(1, (1 - p) * seconds / (seconds * 0.45));
-      const amp = (0.25 + Math.random() * 0.75) * shape;
-      const clapLen = Math.floor(sr * (0.006 + Math.random() * 0.01));
-      for (let i = 0; i < clapLen && at + i < len; i++) {
-        d[at + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / (clapLen / 4));
-      }
-    }
-  }
-  const src = c.createBufferSource();
-  src.buffer = buf;
-  const bp = c.createBiquadFilter();
-  bp.type = "bandpass";
-  bp.frequency.value = 1700;
-  bp.Q.value = 0.55;
-  const g = c.createGain();
-  g.gain.value = vol;
-  src.connect(bp).connect(g).connect(bus(1, 0.45));
-  src.start(c.currentTime + t0);
-}
-
-/** hvízdnutí z publika */
-function whistle(t0: number, vol: number) {
-  const out = bus(0.7, 0.5, Math.random() * 1.2 - 0.6);
-  const o = ctx!.createOscillator();
-  const g = ctx!.createGain();
-  const f0 = 1900 + Math.random() * 500;
-  o.frequency.setValueAtTime(f0, t0);
-  o.frequency.linearRampToValueAtTime(f0 * 1.35, t0 + 0.18);
-  o.frequency.linearRampToValueAtTime(f0 * 1.15, t0 + 0.6);
-  const lfo = ctx!.createOscillator();
-  const lg = ctx!.createGain();
-  lfo.frequency.value = 7;
-  lg.gain.value = 25;
-  lfo.connect(lg).connect(o.frequency);
-  env(g, t0, vol, 0.05, 0.6);
-  o.connect(g).connect(out);
-  o.start(t0);
-  lfo.start(t0);
-  o.stop(t0 + 0.75);
-  lfo.stop(t0 + 0.75);
-}
-
-/** správná odpověď: zvon + krátký potlesk */
+/** správná odpověď: zvon (+ potlesk, jen pokud je v public/sounds/applause.mp3) */
 function correct() {
   const t = ctx!.currentTime;
   const out = bus(0.9, 0.35);
   bell(t, 1046.5, 0.22, out);
   bell(t + 0.11, 1318.5, 0.2, out);
-  applause(1.9, 0.9, 0.12);
+  setTimeout(() => playSample("applause"), 150);
 }
 
 /** chybový bzučák — tvrdý elektromechanický „EEEHH“ */
@@ -424,15 +368,14 @@ function brassChord(notes: number[], t0: number, dur: number, vol: number, out: 
   }
 }
 
-/** „ta-daaa“ + jásot publika */
+/** „ta-daaa“ (+ potlesk z applause.mp3, pokud existuje) */
 function fanfare() {
   const t = ctx!.currentTime;
   const out = bus(0.75, 0.45);
-  brassChord([392, 493.9, 587.3], t, 0.16, 0.035, out); // G dur — krátce
-  brassChord([392, 493.9, 587.3], t + 0.2, 0.12, 0.035, out);
-  brassChord([523.3, 659.3, 784, 1046.5], t + 0.36, 1.6, 0.04, out); // C dur — dlouze
-  applause(5, 1.1, 0.3);
-  for (let i = 0; i < 4; i++) whistle(t + 0.6 + Math.random() * 3, 0.05);
+  brassChord([392, 493.9, 587.3], t, 0.16, 0.085, out); // G dur — krátce
+  brassChord([392, 493.9, 587.3], t + 0.2, 0.12, 0.085, out);
+  brassChord([523.3, 659.3, 784, 1046.5], t + 0.36, 1.6, 0.075, out); // C dur — dlouze
+  setTimeout(() => playSample("applause"), 300);
 }
 
 function tick() {
@@ -451,7 +394,7 @@ export const sfx: Record<Exclude<SoundName, "suspense">, () => void> = {
   tick,
   drumroll: () => drumroll(),
   crash,
-  applause: () => applause(3, 1),
+  applause: () => void playSample("applause"),
 };
 
 function playSample(name: string, loop = false) {
