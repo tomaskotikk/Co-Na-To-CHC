@@ -2,13 +2,22 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { FieldValue } from "firebase-admin/firestore";
 import { firebase } from "@/lib/server/firebase";
-import { SURVEY_COOKIE, SURVEY_LIMITS, SURVEY_MIN_FILL_MS, SURVEY_QUESTIONS } from "@/lib/survey";
+import {
+  fold,
+  SURVEY_CHOICES,
+  SURVEY_CLASSES,
+  SURVEY_COOKIE,
+  SURVEY_LIMITS,
+  SURVEY_MIN_FILL_MS,
+  SURVEY_QUESTIONS,
+} from "@/lib/survey";
 
 export const dynamic = "force-dynamic";
 
 // Firestore:
 //   survey_responses/{role-trida-jmeno-prijmeni}  jedna odpověď (id = jméno → stejný člověk nejde odeslat 2×)
 //   survey/questions                              znění otázek k id q01…q30
+// Učitelé, učebny, předměty a třídy se berou jen ze seznamu v lib/survey.ts — nic jiného se neuloží.
 
 const MAX_BODY = 20_000;
 const WINDOW_MS = 10 * 60_000;
@@ -16,6 +25,8 @@ const WINDOW_MS = 10 * 60_000;
 const MAX_PER_IP = 30;
 const hits = new Map<string, number[]>();
 let questionsSynced = false;
+const CHOICES = Object.fromEntries(Object.entries(SURVEY_CHOICES).map(([k, v]) => [k, new Set(v)]));
+const CLASSES = new Set(SURVEY_CLASSES.map((c) => c.id));
 
 const fail = (status: number, error: string) => Response.json({ ok: false, error }, { status });
 
@@ -36,10 +47,7 @@ const clean = (v: unknown, max: number) =>
     .slice(0, max);
 
 const slug = (s: string) =>
-  s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
+  fold(s)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
@@ -70,20 +78,20 @@ export async function POST(req: Request) {
   const firstName = clean(body.firstName, SURVEY_LIMITS.name);
   const lastName = clean(body.lastName, SURVEY_LIMITS.name);
   const role = body.role === "zak" || body.role === "ucitel" ? body.role : null;
-  const className = role === "zak" ? clean(body.className, SURVEY_LIMITS.className).toUpperCase() : null;
+  const className = role === "zak" ? String(body.className ?? "") : null;
   if (!firstName || !lastName) return fail(400, "Vyplň jméno a příjmení.");
   if (!role) return fail(400, "Vyber, jestli jsi žák, nebo učitel.");
-  if (role === "zak" && !className) return fail(400, "Vyplň třídu.");
+  if (className !== null && !CLASSES.has(className)) return fail(400, "Vyber třídu ze seznamu.");
 
   const list = Array.isArray(body.answers) ? body.answers : [];
   const answers: Record<string, string> = {};
   for (const [i, q] of SURVEY_QUESTIONS.entries()) {
     const a = clean(list[i], SURVEY_LIMITS.answer);
     if (!a) return fail(400, `Chybí odpověď na otázku ${i + 1}.`);
+    if (q.kind !== "text" && !CHOICES[q.kind].has(a)) return fail(400, `U otázky ${i + 1} vyber možnost ze seznamu.`);
     answers[q.id] = a;
   }
 
-  // „4.A“, „4A“ i „4 a“ = stejná třída
   const classKey = className ? slug(className).replace(/-/g, "") : null;
   const key = [role, classKey, slug(firstName), slug(lastName)].filter(Boolean).join("-");
   const { db, projectId } = fb;

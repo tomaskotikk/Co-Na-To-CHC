@@ -3,11 +3,35 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Check } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { SURVEY_LIMITS, SURVEY_QUESTIONS, type SurveyRole } from "@/lib/survey";
+import {
+  SURVEY_ALIASES,
+  SURVEY_CHOICES,
+  SURVEY_CLASSES,
+  SURVEY_LIMITS,
+  SURVEY_QUESTIONS,
+  type SurveyKind,
+  type SurveyRole,
+} from "@/lib/survey";
+import { Picker, type PickerOption } from "./Picker";
 
 const DONE_KEY = "chc-dotaznik-odeslano";
 const DRAFT_KEY = "chc-dotaznik-koncept";
 const DEVICE_KEY = "chc-dotaznik-zarizeni";
+
+const PLACEHOLDERS: Record<Exclude<SurveyKind, "text">, string> = {
+  teacher: "Vyber učitele",
+  room: "Vyber učebnu",
+  subject: "Vyber předmět",
+};
+const SEARCH_PLACEHOLDERS: Record<Exclude<SurveyKind, "text">, string> = {
+  teacher: "Napiš jméno nebo příjmení…",
+  room: "Napiš název učebny…",
+  subject: "Napiš předmět, třeba „matika“…",
+};
+const OPTIONS = Object.fromEntries(
+  Object.entries(SURVEY_CHOICES).map(([kind, list]) => [kind, list.map((v) => ({ value: v, label: v, keywords: SURVEY_ALIASES[v] }))]),
+) as Record<Exclude<SurveyKind, "text">, PickerOption[]>;
+const CLASS_OPTIONS = SURVEY_CLASSES.map((c) => ({ value: c.id, label: c.label, hint: c.hint }));
 
 type Draft = {
   firstName: string;
@@ -65,7 +89,13 @@ export function SurveyForm({ alreadyDone }: { alreadyDone: boolean }) {
     try {
       const saved = JSON.parse(lsGet(DRAFT_KEY) ?? "null") as Draft | null;
       if (saved && Array.isArray(saved.answers)) {
-        setDraft({ ...emptyDraft(), ...saved, answers: SURVEY_QUESTIONS.map((_, i) => String(saved.answers[i] ?? "")) });
+        // starý koncept mohl mít učitele / učebnu / předmět / třídu psané ručně — co není v seznamu, zahodit
+        const answers = SURVEY_QUESTIONS.map((q, i) => {
+          const a = String(saved.answers[i] ?? "");
+          return q.kind !== "text" && !SURVEY_CHOICES[q.kind].includes(a) ? "" : a;
+        });
+        const className = SURVEY_CLASSES.some((c) => c.id === saved.className) ? saved.className : "";
+        setDraft({ ...emptyDraft(), ...saved, answers, className });
       }
     } catch {}
     setLoaded(true);
@@ -194,18 +224,17 @@ export function SurveyForm({ alreadyDone }: { alreadyDone: boolean }) {
           </fieldset>
 
           {draft.role === "zak" && (
-            <label className="sv-field">
-              <span>Třída</span>
-              <input
-                className="sv-input sv-input-short"
-                required
-                maxLength={SURVEY_LIMITS.className}
-                placeholder="např. 4.A"
-                autoCapitalize="characters"
+            <div className="sv-field">
+              <label htmlFor="className">Třída</label>
+              <Picker
+                id="className"
+                title="Tvoje třída"
+                placeholder="Vyber třídu"
+                options={CLASS_OPTIONS}
                 value={draft.className}
-                onChange={(e) => set("className", e.target.value)}
+                onChange={(v) => set("className", v)}
               />
-            </label>
+            </div>
           )}
         </section>
 
@@ -221,23 +250,36 @@ export function SurveyForm({ alreadyDone }: { alreadyDone: boolean }) {
                 <span className="sv-q-num">{i + 1}</span>
                 <span className="sv-q-text">{q.text}</span>
               </label>
-              <input
-                id={q.id}
-                className="sv-input"
-                required
-                maxLength={SURVEY_LIMITS.answer}
-                autoComplete="off"
-                enterKeyHint={i < total - 1 ? "next" : "done"}
-                value={draft.answers[i]}
-                onChange={(e) => setAnswer(i, e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter na mobilu = další otázka, ne odeslání
-                  if (e.key === "Enter" && i < total - 1) {
-                    e.preventDefault();
-                    document.getElementById(SURVEY_QUESTIONS[i + 1].id)?.focus();
-                  }
-                }}
-              />
+              {q.kind !== "text" ? (
+                <Picker
+                  id={q.id}
+                  title={q.text}
+                  placeholder={PLACEHOLDERS[q.kind]}
+                  options={OPTIONS[q.kind]}
+                  value={draft.answers[i]}
+                  onChange={(v) => setAnswer(i, v)}
+                  searchable
+                  searchPlaceholder={SEARCH_PLACEHOLDERS[q.kind]}
+                />
+              ) : (
+                  <input
+                    id={q.id}
+                    className="sv-input"
+                    required
+                    maxLength={SURVEY_LIMITS.answer}
+                    autoComplete="off"
+                    enterKeyHint={i < total - 1 ? "next" : "done"}
+                    value={draft.answers[i]}
+                    onChange={(e) => setAnswer(i, e.target.value)}
+                    onKeyDown={(e) => {
+                      // Enter na mobilu = další otázka, ne odeslání
+                      if (e.key === "Enter" && i < total - 1) {
+                        e.preventDefault();
+                        document.getElementById(SURVEY_QUESTIONS[i + 1].id)?.focus();
+                      }
+                    }}
+                  />
+              )}
             </li>
           ))}
         </ol>

@@ -51,6 +51,7 @@ Data jsou v `data/questions.json` (dá se upravit i ručně / přes JSON import)
 ## Dotazník (sběr odpovědí před show)
 
 Stránka **/dotaznik** (např. `https://co-na-to-chc.onrender.com/dotaznik`) — jméno, příjmení, žák/učitel (+ třída) a 30 otázek z `lib/survey.ts`.
+Učitelé (39), učebny (27), předměty (61) a třídy (1.A–4.C: A filmaři, B grafici, C vývojáři) se vybírají ze seznamu ve stejném souboru — server nic mimo seznam neuloží.
 Odpovědi jdou do Firestore (potřebuje Firebase klíč):
 
 | Kde | Co |
