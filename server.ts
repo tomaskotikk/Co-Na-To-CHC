@@ -2,13 +2,14 @@ import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
 import { Game } from "./lib/server/game";
+import { createStorage } from "./lib/server/storage";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT) || 3000;
 
 const app = next({ dev, hostname: "localhost", port });
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
   const handle = app.getRequestHandler();
   const httpServer = createServer((req, res) => handle(req, res));
 
@@ -19,13 +20,15 @@ app.prepare().then(() => {
     pingTimeout: 8_000,
   });
 
-  const game = new Game(io, port);
+  const storage = createStorage();
+  const game = new Game(io, port, storage, await storage.load());
 
   httpServer.listen(port, "0.0.0.0", () => {
     const line = "─".repeat(52);
     console.log(`\n${line}\n  CO NA TO CHC  ·  ${dev ? "vývojový režim" : "produkce"}\n${line}`);
     console.log(`  Projektor (na notebooku):  http://localhost:${port}`);
     for (const url of game.lanUrls) console.log(`  V síti:                    ${url}`);
+    console.log(`  Ukládání:                  ${storage.label}`);
     if (process.env.PUBLIC_URL) console.log(`  Veřejná adresa:            ${process.env.PUBLIC_URL}`);
     console.log(`${line}\n`);
   });

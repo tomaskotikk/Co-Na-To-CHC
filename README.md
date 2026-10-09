@@ -68,7 +68,21 @@ Vercel **nejde** — běží jen na serverless funkcích, takže neudrží WebSo
 3. Projektor otevři na `https://<tvoje-appka>.onrender.com/?klic=<SCREEN_KEY>` — jen s klíčem se ukáže admin QR.
 4. Týmy a admin jdou normálně přes QR kódy (adresa se doplní sama).
 
-Omezení free plánu: po ~15 min bez návštěvy server usne (první načtení pak trvá ~1 min) a při restartu se smaže stav hry i otázky upravené v adminu.
-Otázky proto ulož i do repa (`data/questions.json`, export přes JSON v adminu). Na samotný ples je spolehlivější notebook + hotspot, nebo placený plán.
+Omezení free plánu: po ~15 min bez návštěvy server usne (první načtení pak trvá ~1 min) a při restartu se smaže stav hry i otázky upravené v adminu — **pokud nemáš zapojený Firebase** (viz níže).
+Na samotný ples je spolehlivější notebook + hotspot, nebo placený plán.
+
+## Firebase (trvalé uložení)
+
+S Firebase se stav hry i otázky ukládají do Firestore (kolekce `show`, dokumenty `game` a `questions`), takže přežijí restart Renderu i jiný notebook.
+Do `data/` se ukládá pořád taky — když nejde internet, hra jede dál z lokální zálohy. Při startu se načte novější z obou.
+
+1. console.firebase.google.com → **Add project** (Analytics není potřeba).
+2. **Build › Firestore Database › Create database** → lokace `eur3` (nebo `europe-west3`) → *Start in production mode*.
+3. ⚙ **Project settings › Service accounts › Generate new private key** → stáhne se JSON.
+4. Lokálně: soubor přejmenuj na `firebase-key.json` a dej ho do kořene projektu (je v `.gitignore`, **nikdy ho necommituj**).
+   Na Renderu: Environment › `FIREBASE_SERVICE_ACCOUNT` = celý obsah toho JSON souboru.
+5. Spusť server — v konzoli musí být `Ukládání: Firebase (<projekt>) + záloha v data/`.
+
+Bez klíče aplikace funguje jako dřív (jen `data/`).
 
 **Před plesem:** vyzkoušej to celé na místě s reálnou sítí a projektorem.

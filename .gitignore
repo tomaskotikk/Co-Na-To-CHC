@@ -3,3 +3,6 @@ node_modules
 next-env.d.ts
 data/game.json
 *.tsbuildinfo
+
+# Firebase klíč — NIKDY necommitovat
+firebase-key.json

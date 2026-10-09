@@ -9,3 +9,6 @@ services:
     envVars:
       - key: SCREEN_KEY
         generateValue: true
+      # celý obsah JSON klíče z Firebase (Service accounts › Generate new private key)
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false

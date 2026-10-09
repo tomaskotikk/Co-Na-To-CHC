@@ -1,6 +1,4 @@
-import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
 import crypto from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import {
@@ -19,10 +17,7 @@ import {
   type Team,
   type View,
 } from "../types";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const STATE_FILE = path.join(DATA_DIR, "game.json");
-const QUESTIONS_FILE = path.join(DATA_DIR, "questions.json");
+import type { Storage, Stored } from "./storage";
 
 
 type Persisted = {
@@ -45,14 +40,6 @@ type PendingInternal = { id: number; label: string; executeAt: number; delayMs: 
 const id = (n = 8) => crypto.randomBytes(n).toString("base64url").slice(0, n);
 const code4 = () => String(crypto.randomInt(1000, 10000));
 const clone = <T>(v: T): T => structuredClone(v);
-
-function readJson<T>(file: string): T | null {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
-  } catch {
-    return null;
-  }
-}
 
 function localAddresses(): string[] {
   const out: string[] = [];
@@ -159,9 +146,13 @@ export class Game {
   private broadcastQueued = false;
   private readonly localAddrs = new Set(["127.0.0.1", "::1", ...localAddresses()]);
 
-  constructor(private io: Server, private port: number) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const saved = readJson<Persisted>(STATE_FILE);
+  constructor(
+    private io: Server,
+    private port: number,
+    private storage: Storage,
+    stored: Stored,
+  ) {
+    const saved = stored.state as Persisted | null;
     this.s = {
       adminToken: saved?.adminToken ?? id(12),
       adminSession: saved?.adminSession ?? null,
@@ -181,9 +172,10 @@ export class Game {
         ...(process.env.PUBLIC_URL ? { baseUrl: process.env.PUBLIC_URL.replace(/\/+$/, "") } : {}),
       },
     };
-    const qs = readJson<unknown>(QUESTIONS_FILE);
+    const qs = stored.questions;
     this.questions = qs ? sanitizeQuestions(qs) : defaultQuestions();
-    if (!qs) this.writeQuestions();
+    // i při startu, ať má Firebase vždy aktuální kopii
+    this.writeQuestions();
     this.save();
     io.on("connection", (socket) => this.onConnection(socket));
   }
@@ -677,11 +669,11 @@ export class Game {
   private save() {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      fs.writeFile(STATE_FILE, JSON.stringify(this.s, null, 2), (e) => e && console.error("Uložení stavu selhalo", e));
+      this.storage.saveState(this.s);
     }, 300);
   }
 
   private writeQuestions() {
-    fs.writeFile(QUESTIONS_FILE, JSON.stringify(this.questions, null, 2), (e) => e && console.error("Uložení otázek selhalo", e));
+    this.storage.saveQuestions(this.questions);
   }
 }
