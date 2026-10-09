@@ -1,0 +1,299 @@
+/* ═══════════════════════ DOTAZNÍK (telefon) ═══════════════════════ */
+
+.sv {
+  min-height: 100dvh;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: calc(28px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+/* stránka se scrolluje — tělo z globals.css má height: 100 %, tady potřebujeme auto */
+html:has(.sv),
+html:has(.sv) body {
+  height: auto;
+  min-height: 100%;
+  background:
+    radial-gradient(ellipse 140% 40% at 50% 0%, rgba(255, 213, 0, 0.14), transparent 60%) no-repeat,
+    var(--ink);
+}
+
+.sv-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 5px;
+  background: var(--ink-3);
+  z-index: 10;
+}
+.sv-progress-bar {
+  height: 100%;
+  background: var(--y);
+  box-shadow: 0 0 12px rgba(255, 213, 0, 0.6);
+  transition: width 0.3s var(--ease-out);
+}
+
+.sv-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.sv-logo {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+
+.sv-title {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  padding-top: 4px;
+}
+
+.sv-lead {
+  color: #c9c7bf;
+  line-height: 1.5;
+}
+
+.sv-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sv-card {
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sv-h2 {
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--y);
+}
+
+.sv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 380px) {
+  .sv-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  min-width: 0;
+}
+.sv-field > span {
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.sv-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid #333;
+  background: var(--ink);
+  /* 16px+ — jinak iOS při psaní zoomuje */
+  font-size: 17px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sv-input:focus {
+  border-color: var(--y);
+  box-shadow: 0 0 0 4px rgba(255, 213, 0, 0.15);
+}
+.sv-input::placeholder {
+  color: #5d5b55;
+}
+.sv-input-short {
+  max-width: 140px;
+}
+
+.sv-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sv-seg-opt {
+  position: relative;
+}
+.sv-seg-opt input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sv-seg-opt span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border-radius: 12px;
+  border: 2px solid #333;
+  background: var(--ink);
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 3px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sv-seg-opt input:checked + span {
+  background: var(--y);
+  border-color: var(--y);
+  color: var(--ink);
+}
+.sv-seg-opt input:focus-visible + span {
+  box-shadow: 0 0 0 4px rgba(255, 213, 0, 0.3);
+}
+
+.sv-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sv-q {
+  gap: 12px;
+  transition: border-color 0.2s;
+}
+.sv-q.is-done {
+  border-color: rgba(255, 213, 0, 0.35);
+}
+
+.sv-q-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sv-q-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--y);
+  color: var(--y);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 14px;
+  padding-top: 2px;
+  transition: background 0.2s, color 0.2s;
+}
+.sv-q.is-done .sv-q-num {
+  background: var(--y);
+  color: var(--ink);
+}
+
+.sv-q-text {
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.35;
+  padding-top: 4px;
+}
+
+.sv-hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.sv-submit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sv-count {
+  color: var(--mute);
+  text-align: center;
+  font-weight: 600;
+}
+
+.sv-err {
+  color: #ffb4ab;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.sv-btn {
+  min-height: 64px;
+  border-radius: 16px;
+  background: var(--y);
+  color: var(--ink);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 21px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 4px;
+  box-shadow: 0 6px 0 var(--y-lo), 0 16px 40px rgba(255, 213, 0, 0.25);
+  transition: transform 0.1s, box-shadow 0.1s, opacity 0.2s;
+}
+.sv-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 var(--y-lo);
+}
+.sv-btn:disabled {
+  opacity: 0.5;
+}
+
+/* poděkování / už odesláno */
+.sv-end {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 420px;
+}
+
+.sv-check {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+  box-shadow: 0 0 40px rgba(255, 213, 0, 0.35);
+}
+.sv-check svg {
+  width: 40px;
+  height: 40px;
+}

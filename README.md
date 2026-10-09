@@ -48,6 +48,19 @@ V adminu záložka **Otázky** (jde i z notebooku – otevři stejný admin odka
 Odpověď + počet lidí, co ji řekli. Po uložení se seřadí: karta 1 = nejčastější. Násobič ×2/×3 pro finálové otázky.
 Data jsou v `data/questions.json` (dá se upravit i ručně / přes JSON import). Stav hry se ukládá do `data/game.json`, takže restart notebooku nic nesmaže.
 
+## Dotazník (sběr odpovědí před show)
+
+Stránka **/dotaznik** (např. `https://co-na-to-chc.onrender.com/dotaznik`) — jméno, příjmení, žák/učitel (+ třída) a 30 otázek z `lib/survey.ts`.
+Odpovědi jdou do Firestore (potřebuje Firebase klíč):
+
+| Kde | Co |
+|---|---|
+| `survey_responses/{role-trida-jmeno-prijmeni}` | jedna odpověď: `firstName`, `lastName`, `role`, `className`, `answers.q01…q30`, `createdAt` |
+| `survey/questions` | znění otázek k id `q01…q30` |
+
+Proti spamu: jedno odeslání na zařízení (localStorage + cookie), jedno na jméno, skrytá past na boty, min. 30 s na vyplnění a limit odeslání z jedné IP.
+Do hry (`data/questions.json`) se odpovědi zatím **nepřenáší**.
+
 ## Síť – důležité na plese
 
 Telefony se připojují **na notebook**, takže musí být na **stejné Wi-Fi** (adresu typu `http://192.168.x.x:3000` ukáže konzole i QR kód).

@@ -3,13 +3,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { cert, initializeApp } from "firebase-admin/app";
-import { getFirestore, type DocumentReference } from "firebase-admin/firestore";
+import type { DocumentReference } from "firebase-admin/firestore";
+import { firebase } from "./firebase";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "game.json");
 const QUESTIONS_FILE = path.join(DATA_DIR, "questions.json");
-const KEY_FILE = path.join(process.cwd(), "firebase-key.json");
 const COLLECTION = "show";
 const LOAD_TIMEOUT_MS = 8000;
 
@@ -34,18 +33,6 @@ function readLocal(file: string): Loaded | null {
 
 function writeLocal(file: string, data: unknown, what: string) {
   fs.writeFile(file, JSON.stringify(data, null, 2), (e) => e && console.error(`Uložení ${what} selhalo`, e));
-}
-
-/** Klíč service accountu: proměnná FIREBASE_SERVICE_ACCOUNT (celý JSON), nebo soubor firebase-key.json. */
-function serviceAccount(): Record<string, string> | null {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim() || (fs.existsSync(KEY_FILE) ? fs.readFileSync(KEY_FILE, "utf8") : "");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    console.error("Firebase: klíč není platný JSON — ukládám jen do data/.");
-    return null;
-  }
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -82,9 +69,9 @@ function latestWriter(ref: DocumentReference, what: string) {
 
 export function createStorage(): Storage {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  const key = serviceAccount();
+  const fb = firebase();
 
-  if (!key) {
+  if (!fb) {
     return {
       label: "jen lokálně (data/)",
       async load() {
@@ -95,7 +82,7 @@ export function createStorage(): Storage {
     };
   }
 
-  const db = getFirestore(initializeApp({ credential: cert(key) }));
+  const { db, projectId } = fb;
   const stateRef = db.collection(COLLECTION).doc("game");
   const questionsRef = db.collection(COLLECTION).doc("questions");
   const writeState = latestWriter(stateRef, "stavu hry");
@@ -111,7 +98,7 @@ export function createStorage(): Storage {
     (remote && local ? (remote.time >= local.time ? remote : local) : (remote ?? local))?.data ?? null;
 
   return {
-    label: `Firebase (${key.project_id}) + záloha v data/`,
+    label: `Firebase (${projectId}) + záloha v data/`,
     async load() {
       const localState = readLocal(STATE_FILE);
       const localQuestions = readLocal(QUESTIONS_FILE);
