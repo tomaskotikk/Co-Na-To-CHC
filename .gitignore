@@ -6,3 +6,6 @@ data/game.json
 
 # Firebase klíč — NIKDY necommitovat
 firebase-key.json
+
+# hesla (RESULTS_PASSWORD) — NIKDY necommitovat
+.env*
