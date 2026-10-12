@@ -12,6 +12,3 @@ services:
       # celý obsah JSON klíče z Firebase (Service accounts › Generate new private key)
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
-      # heslo ke stránce /vysledky (aspoň 10 znaků)
-      - key: RESULTS_PASSWORD
-        sync: false

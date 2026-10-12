@@ -62,12 +62,6 @@ Odpovědi jdou do Firestore (potřebuje Firebase klíč):
 Proti spamu: jedno odeslání na zařízení (localStorage + cookie), jedno na jméno, skrytá past na boty, min. 30 s na vyplnění a limit odeslání z jedné IP.
 Do hry (`data/questions.json`) se odpovědi zatím **nepřenáší**.
 
-### Výsledky (jen pro organizátora)
-
-Stránka **/vysledky** — živý počet vyplnění podle ročníků a tříd, sečtené odpovědi na každou otázku a seznam lidí.
-Zamčená heslem z proměnné `RESULTS_PASSWORD` (aspoň 10 znaků): na Vercelu/Renderu v Environment Variables, lokálně v souboru `.env.local` (`RESULTS_PASSWORD=…`, je v `.gitignore`).
-Po přihlášení platí 30 dní; změna hesla odhlásí všechny. 5 špatných pokusů = 15 min blok.
-
 ## Síť – důležité na plese
 
 Telefony se připojují **na notebook**, takže musí být na **stejné Wi-Fi** (adresu typu `http://192.168.x.x:3000` ukáže konzole i QR kód).
