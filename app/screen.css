@@ -1451,3 +1451,698 @@
 @keyframes podIn {
   from { opacity: 0; transform: translateY(60px) scale(0.85); }
 }
+
+/* ═════════ OTÁZKA BEZ KARET (čeká se na bzučák) ═════════ */
+
+.board.asking {
+  justify-content: center;
+}
+.board.asking .q-wrap {
+  flex: 1;
+  justify-content: center;
+}
+.board.asking .q-bubble {
+  max-width: 82%;
+  padding: calc(var(--u) * 2.6) calc(var(--u) * 4.4) calc(var(--u) * 2.2);
+  --bw: calc(var(--u) * 0.6);
+  box-shadow: 0 0 10vh rgba(255, 213, 0, 0.18);
+}
+.board.asking .q-text {
+  font-size: calc(var(--u) * 4.8);
+}
+
+/* slovo po slově */
+.q-text .w {
+  display: inline-block;
+  white-space: pre;
+  animation: wIn 0.65s var(--ease-out) both;
+}
+@keyframes wIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em) scale(0.96);
+    filter: blur(10px);
+  }
+}
+
+.buzz-call {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  margin-top: calc(var(--u) * 3.4);
+  padding: 0.7em 1.4em 0.55em;
+  border-radius: 999px;
+  border: 2px solid var(--y);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.9);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--y);
+  background: rgba(11, 11, 11, 0.8);
+  animation:
+    rise2 0.6s var(--ease-out) both,
+    callPulse 1.6s 1s ease-in-out infinite;
+}
+.buzz-call-dot {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--y);
+  box-shadow: 0 0 0 0 rgba(255, 213, 0, 0.7);
+  animation: ping 1.2s ease-out infinite;
+}
+@keyframes callPulse {
+  50% {
+    box-shadow: 0 0 5vh rgba(255, 213, 0, 0.35);
+  }
+}
+@keyframes ping {
+  to {
+    box-shadow: 0 0 0 1.2em rgba(255, 213, 0, 0);
+  }
+}
+
+/* karty po bzučáku naskočí až po oslavě, kdo byl první */
+.board.after-buzz .card {
+  animation-delay: calc(var(--i) * 110ms + 2s);
+}
+.board.playing .duelbar,
+.board.playing .teambar {
+  animation: rise2 0.6s var(--ease-out) both;
+}
+
+/* dlouhé odpovědi (jména učitelů) se zmenší, ať se vejdou */
+.card-text {
+  font-size: clamp(calc(var(--u) * 1.5), calc(var(--u) * 46 / var(--len, 12)), calc(var(--u) * 2.5));
+}
+
+/* ═════════ LIŠTA DUELU ═════════ */
+
+.duelbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  padding-top: calc(var(--u) * 0.6);
+}
+.duelbar-vs {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 2.4);
+  color: var(--y);
+  letter-spacing: 0.04em;
+}
+.duelbar-side {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.2);
+  padding: calc(var(--u) * 0.8) calc(var(--u) * 1.4);
+  border-radius: calc(var(--u) * 1.2);
+  background: rgba(20, 20, 20, 0.92);
+  border: 2px solid var(--line);
+  transition:
+    border-color 0.4s,
+    box-shadow 0.4s,
+    opacity 0.4s,
+    filter 0.4s;
+}
+.duelbar-side.right {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.duelbar-side.turn {
+  border-color: var(--y);
+  box-shadow: 0 0 0 calc(var(--u) * 0.15) var(--y), 0 0 5vh rgba(255, 213, 0, 0.3);
+}
+.duelbar-side.out {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.duelbar-side .em {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 4.4);
+  height: calc(var(--u) * 4.4);
+  border-radius: 50%;
+  background: var(--y);
+}
+.duelbar-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.35);
+}
+.duelbar-side.right .duelbar-info {
+  align-items: flex-end;
+}
+.duelbar-name {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.6);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  padding-top: 0.1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.duelbar-score {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 3.6);
+  line-height: 1;
+  color: var(--y);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.08em;
+}
+.turn-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% -60%;
+  padding: 0.35em 0.9em 0.2em;
+  border-radius: 999px;
+  background: var(--y);
+  color: var(--ink);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.05);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 0 3vh rgba(255, 213, 0, 0.5);
+}
+
+/* ═════════ PAVOUK ═════════ */
+
+.bracket {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 8) calc(var(--u) * 3) calc(var(--u) * 3);
+}
+.bracket-heads {
+  display: flex;
+  margin-bottom: calc(var(--u) * 1);
+}
+.bracket-heads span {
+  text-align: center;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.3);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--mute);
+  animation: rise2 0.6s var(--ease-out) both;
+}
+.bracket-heads span.y {
+  color: var(--y);
+}
+.bracket-field {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.bracket-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.bl-base,
+.bl-on {
+  fill: none;
+  stroke-linejoin: round;
+}
+.bl-base {
+  stroke: #333;
+  stroke-width: 2.5;
+}
+.bl-on {
+  stroke: var(--y);
+  stroke-width: 4.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  filter: drop-shadow(0 0 6px rgba(255, 213, 0, 0.6));
+  transition: stroke-dashoffset 0.9s var(--ease-out);
+}
+.bl-on.on {
+  stroke-dashoffset: 0;
+}
+
+.bm {
+  position: absolute;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  border-radius: calc(var(--u) * 0.9);
+  background: rgba(18, 18, 18, 0.96);
+  border: 2px solid var(--line);
+  box-shadow: 0 1vh 3vh rgba(0, 0, 0, 0.5);
+  animation: bmIn 0.7s var(--ease-back) both;
+  transition:
+    border-color 0.4s,
+    box-shadow 0.4s;
+}
+@keyframes bmIn {
+  from {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.92);
+  }
+}
+.bm.live {
+  border-color: var(--y);
+  box-shadow: 0 0 0 calc(var(--u) * 0.15) var(--y), 0 0 5vh rgba(255, 213, 0, 0.35);
+  animation:
+    bmIn 0.7s var(--ease-back) both,
+    livePulse 1.8s 0.8s ease-in-out infinite;
+}
+@keyframes livePulse {
+  50% {
+    box-shadow: 0 0 0 calc(var(--u) * 0.3) var(--y), 0 0 8vh rgba(255, 213, 0, 0.5);
+  }
+}
+.bm-tag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% -62%;
+  padding: 0.3em 0.8em 0.15em;
+  border-radius: 999px;
+  background: var(--y);
+  color: var(--ink);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 0.9);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.bm-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+  min-height: calc(var(--u) * 3.8);
+  padding: calc(var(--u) * 0.4) calc(var(--u) * 1);
+  transition:
+    background 0.4s,
+    color 0.4s,
+    opacity 0.4s;
+}
+.bm-row + .bm-row {
+  border-top: 1px solid var(--line);
+}
+.bm-row.win {
+  background: linear-gradient(90deg, rgba(255, 213, 0, 0.22), transparent);
+  color: var(--y);
+}
+.bm-row.lose {
+  opacity: 0.38;
+}
+.bm-row.empty .bm-name,
+.bye-row {
+  color: #555;
+}
+.bye-row {
+  justify-content: center;
+  font-size: calc(var(--u) * 1);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.bm-row.arrive {
+  animation: arrive 0.8s 0.85s var(--ease-back) both;
+}
+@keyframes arrive {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+    background: var(--y);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+    background: rgba(255, 213, 0, 0.5);
+  }
+}
+.bracket.drawing .bm-row:not(.empty) {
+  animation: rise2 0.5s var(--ease-out) backwards;
+}
+
+.slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+}
+.slot .em,
+.champ-team .em {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 2.6);
+  height: calc(var(--u) * 2.6);
+  border-radius: 50%;
+  background: var(--y);
+}
+.slot.spinning {
+  filter: blur(0.6px);
+  opacity: 0.75;
+}
+.slot.spinning .bm-name {
+  color: var(--mute);
+}
+.slot.landed {
+  animation: land 0.45s var(--ease-back);
+}
+@keyframes land {
+  from {
+    transform: scale(1.18);
+  }
+}
+.bm-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.35);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  padding-top: 0.12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bm-name.tbd {
+  color: #555;
+  text-align: center;
+}
+.bm-score {
+  flex: none;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.6);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.1em;
+}
+
+.bm.champ {
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+  padding: calc(var(--u) * 1.4) calc(var(--u) * 1);
+  border-style: dashed;
+  border-color: #444;
+  text-align: center;
+}
+.champ-ic {
+  width: calc(var(--u) * 4);
+  height: calc(var(--u) * 4);
+  color: #555;
+  transition: color 0.5s;
+}
+.champ-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.6);
+}
+.champ-team .em {
+  width: calc(var(--u) * 4.4);
+  height: calc(var(--u) * 4.4);
+}
+.champ-name {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.8);
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+.champ-name.tbd {
+  font-size: calc(var(--u) * 1.1);
+  letter-spacing: 0.14em;
+  color: #555;
+}
+.bm.champ.crowned {
+  border-style: solid;
+  border-color: var(--y);
+  background: linear-gradient(180deg, rgba(255, 213, 0, 0.22), rgba(18, 18, 18, 0.96));
+  box-shadow: 0 0 0 calc(var(--u) * 0.2) var(--y), 0 0 10vh rgba(255, 213, 0, 0.45);
+}
+.bm.champ.crowned .champ-ic {
+  color: var(--y);
+  animation: floaty 3s ease-in-out infinite;
+}
+.bm.champ.crowned .champ-name {
+  color: var(--y);
+}
+.bm.champ.just {
+  animation: champIn 1s 1.6s var(--ease-back) both;
+}
+.bm.champ.just .champ-team {
+  animation: rise2 0.6s 1.9s var(--ease-out) both;
+}
+@keyframes champIn {
+  0% {
+    transform: scale(0.85);
+    box-shadow: 0 0 0 0 rgba(255, 213, 0, 0.9);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 calc(var(--u) * 3) rgba(255, 213, 0, 0);
+  }
+}
+
+/* ═════════ DUEL — A vs B ═════════ */
+
+.duel {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+.duel-half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 58%;
+  display: flex;
+  align-items: center;
+}
+.duel-half.a {
+  left: 0;
+  background: linear-gradient(135deg, var(--y-hi), var(--y) 55%, var(--y-lo));
+  color: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 72% 100%, 0 100%);
+}
+.duel-half.b {
+  right: 0;
+  background:
+    radial-gradient(ellipse at 70% 40%, rgba(255, 213, 0, 0.12), transparent 60%),
+    linear-gradient(135deg, #1d1d1d, #0b0b0b);
+  clip-path: polygon(28% 0, 100% 0, 100% 100%, 0 100%);
+}
+/* tým vycentrovaný ve „své“ čtvrtině obrazovky, ať jméno nezajede pod VS */
+.duel-team {
+  position: absolute;
+  top: 50%;
+  translate: -50% -50%;
+  width: calc(var(--u) * 34);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 1.6);
+  text-align: center;
+}
+.duel-half.a .duel-team {
+  left: calc(24 / 58 * 100%);
+}
+.duel-half.b .duel-team {
+  left: calc((76 - 42) / 58 * 100%);
+}
+.duel-em {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 15);
+  height: calc(var(--u) * 15);
+  border-radius: 50%;
+}
+.duel-half.a .duel-em {
+  background: var(--ink);
+  color: var(--y);
+  box-shadow: 0 0 0 calc(var(--u) * 0.6) var(--y), 0 0 0 calc(var(--u) * 1) var(--ink);
+}
+.duel-half.b .duel-em {
+  background: var(--y);
+  color: var(--ink);
+  box-shadow: 0 0 0 calc(var(--u) * 0.6) var(--ink), 0 0 0 calc(var(--u) * 1) var(--y);
+}
+.duel-em .ti {
+  width: 58%;
+  height: 58%;
+}
+.duel-name {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: clamp(calc(var(--u) * 3), calc(var(--u) * 52 / var(--len, 10)), calc(var(--u) * 5.4));
+  line-height: 0.95;
+  text-transform: uppercase;
+  word-break: break-word;
+}
+.duel-half.b .duel-name {
+  color: var(--y);
+}
+.duel-vs {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  border-radius: 50%;
+  background: var(--ink);
+  border: calc(var(--u) * 0.6) solid var(--y);
+  box-shadow: 0 0 0 calc(var(--u) * 0.6) var(--ink), 0 0 12vh rgba(255, 213, 0, 0.5);
+  z-index: 3;
+}
+.duel-vs span {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 7.5);
+  color: var(--y);
+  line-height: 1;
+  padding-top: 0.08em;
+  letter-spacing: -0.02em;
+}
+.duel-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.duel-top {
+  position: absolute;
+  top: calc(var(--u) * 3);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--u) * 1);
+  z-index: 5;
+}
+.duel-top span {
+  padding: 0.55em 1.2em 0.4em;
+  border-radius: 999px;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 1.5);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--y);
+  border: 2px solid var(--y);
+}
+.duel-top .duel-count {
+  color: var(--white);
+  border-color: var(--line);
+}
+.duel-call {
+  position: absolute;
+  bottom: calc(var(--u) * 4);
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  padding: 0.7em 1.6em 0.55em;
+  border-radius: 999px;
+  background: rgba(11, 11, 11, 0.88);
+  border: 2px solid var(--line);
+  text-align: center;
+  z-index: 5;
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 2.2);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--white);
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.8);
+}
+
+.duel.play .duel-half.a {
+  animation: halfA 0.9s var(--ease-out) both;
+}
+.duel.play .duel-half.b {
+  animation: halfB 0.9s var(--ease-out) both;
+}
+.duel.play .duel-team {
+  animation: teamIn 0.7s 0.55s var(--ease-back) both;
+}
+.duel.play .duel-vs {
+  animation:
+    vsSlam 0.6s 0.95s var(--ease-back) both,
+    heartbeat 1.6s 2.2s ease-in-out infinite;
+}
+.duel.play .duel-flash {
+  animation: flash 0.7s 0.95s ease-out both;
+}
+.duel.play .duel-top {
+  animation: rise2 0.6s 1.4s var(--ease-out) both;
+}
+.duel.play .duel-call {
+  animation:
+    rise2 0.7s 1.8s var(--ease-out) both,
+    hintPulse 2s 2.6s ease-in-out infinite;
+}
+.duel.play {
+  animation: shake 0.45s 0.95s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+.duel.hold .duel-vs {
+  animation: heartbeat 1.6s ease-in-out infinite;
+}
+@keyframes halfA {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes halfB {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes teamIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6) translateY(30px);
+  }
+}
+@keyframes vsSlam {
+  from {
+    opacity: 0;
+    transform: scale(3.2) rotate(-12deg);
+  }
+}
+@keyframes shake {
+  20% {
+    transform: translate3d(-1vw, 0.5vh, 0);
+  }
+  40% {
+    transform: translate3d(1vw, -0.5vh, 0);
+  }
+  60% {
+    transform: translate3d(-0.6vw, 0.3vh, 0);
+  }
+  80% {
+    transform: translate3d(0.4vw, 0, 0);
+  }
+}

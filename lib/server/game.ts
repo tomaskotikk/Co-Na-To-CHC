@@ -5,10 +5,13 @@ import {
   TEAM_ICONS,
   MAX_STRIKES,
   MAX_TEAMS,
+  nextMatch,
   type Ack,
   type AdminCmd,
   type AdminState,
+  type Bracket,
   type Buzzer,
+  type Match,
   type Fx,
   type PublicState,
   type Question,
@@ -18,6 +21,7 @@ import {
   type View,
 } from "../types";
 import type { Storage, Stored } from "./storage";
+import { buildFromSurvey } from "./surveyImport";
 
 
 type Persisted = {
@@ -28,10 +32,12 @@ type Persisted = {
   view: View;
   questionIndex: number;
   round: Round | null;
+  bracket: Bracket | null;
+  matchId: string | null;
   settings: Settings;
 };
 
-type Snapshot = Pick<Persisted, "teams" | "view" | "questionIndex" | "round"> & { buzzer: Buzzer };
+type Snapshot = Pick<Persisted, "teams" | "view" | "questionIndex" | "round" | "bracket" | "matchId"> & { buzzer: Buzzer };
 
 type FxInput = { [K in Fx["kind"]]: Omit<Extract<Fx, { kind: K }>, "id"> }[Fx["kind"]];
 
@@ -40,6 +46,28 @@ type PendingInternal = { id: number; label: string; executeAt: number; delayMs: 
 const id = (n = 8) => crypto.randomBytes(n).toString("base64url").slice(0, n);
 const code4 = () => String(crypto.randomInt(1000, 10000));
 const clone = <T>(v: T): T => structuredClone(v);
+const closedBuzzer = (): Buzzer => ({ open: false, winner: null, teams: null });
+
+function shuffle<T>(list: T[]): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** pořadí nasazení v pavoukovi (1 vs 8, 4 vs 5, 2 vs 7, 3 vs 6…) — volné postupy dostanou různé větve */
+function seedOrder(size: number) {
+  let order = [1];
+  while (order.length < size) {
+    const n = order.length * 2;
+    order = order.flatMap((s) => [s, n + 1 - s]);
+  }
+  return order;
+}
+
+const VIEWS: View[] = ["lobby", "intro", "bracket", "duel", "board", "final"];
 
 function localAddresses(): string[] {
   const out: string[] = [];
@@ -135,7 +163,7 @@ function sanitizeQuestions(input: unknown): Question[] {
 export class Game {
   private s: Persisted;
   private questions: Question[];
-  private buzzer: Buzzer = { open: false, winner: null };
+  private buzzer: Buzzer = closedBuzzer();
   private fx: Fx = { id: 0, kind: "none" };
   private fxSeq = Date.now();
   private pending: PendingInternal | null = null;
@@ -162,9 +190,12 @@ export class Game {
         icon: TEAM_ICONS.includes(t.icon) ? t.icon : TEAM_ICONS[i % TEAM_ICONS.length],
         online: false,
       })),
-      view: saved?.view ?? "lobby",
+      view: saved?.view && VIEWS.includes(saved.view) ? saved.view : saved?.bracket ? "bracket" : "lobby",
       questionIndex: saved?.questionIndex ?? -1,
-      round: saved?.round ?? null,
+      // starší uložený stav neměl duely
+      round: saved?.round ? { ...({ matchId: null, phase: "play", turn: null } as const), ...(saved.round as Partial<Round>) } as Round : null,
+      bracket: saved?.bracket ?? null,
+      matchId: saved?.matchId ?? null,
       settings: {
         delayMs: 2500,
         baseUrl: "",
@@ -255,10 +286,10 @@ export class Game {
       this.changed();
     });
 
-    socket.on("admin:cmd", (cmd: AdminCmd, ack?: (r: Ack) => void) => {
+    socket.on("admin:cmd", async (cmd: AdminCmd, ack?: (r: Ack) => void) => {
       if (!socket.data.admin || !socket.rooms.has("admins")) return ack?.({ ok: false, error: "Nejsi admin." });
       try {
-        const err = this.command(cmd);
+        const err = cmd.type === "importSurvey" ? await this.importSurvey() : this.command(cmd);
         ack?.(err ? { ok: false, error: err } : { ok: true });
       } catch (e) {
         console.error(e);
@@ -292,9 +323,17 @@ export class Game {
       const teamId = socket.data.teamId as string | undefined;
       if (!teamId || !this.buzzer.open || this.buzzer.winner) return;
       if (!this.s.teams.some((t) => t.id === teamId)) return;
-      this.buzzer = { open: false, winner: teamId };
-      this.emitFx({ kind: "buzz", teamId });
-      this.changed();
+      if (this.buzzer.teams && !this.buzzer.teams.includes(teamId)) return;
+      // přes apply → moderátor může omylem zmáčknutý bzučák vrátit
+      this.apply(() => {
+        this.buzzer = { ...this.buzzer, open: false, winner: teamId };
+        const round = this.s.round;
+        if (round && round.phase === "question") {
+          round.phase = "play";
+          round.turn = teamId;
+        }
+        this.emitFx({ kind: "buzz", teamId });
+      });
     });
 
     socket.on("disconnect", () => {
@@ -339,20 +378,82 @@ export class Game {
         this.flushPending();
         this.apply(() => {
           this.s.view = "intro";
-          this.buzzer = { open: false, winner: null };
+          this.buzzer = closedBuzzer();
           this.emitFx({ kind: "showIntro" });
         });
         return null;
       }
-      case "goto": {
-        if (!this.questions[cmd.index]) return "Otázka neexistuje.";
+      case "goto":
+        return this.openQuestion(cmd.index);
+      case "importSurvey":
+        // asynchronní — řeší handler admin:cmd
+        return null;
+      case "showQuestion": {
+        const index = this.s.questionIndex + 1;
+        if (!this.questions[index]) return "Došly otázky — načti je z dotazníku nebo přidej v záložce Otázky.";
+        return this.openQuestion(index);
+      }
+      case "drawBracket": {
+        if (this.s.teams.length < 2) return "Na pavouka jsou potřeba aspoň 2 týmy.";
+        if (this.s.bracket?.matches.some((m) => !m.bye && m.winner)) return "Pavouk už běží — přelosovat jde jen před prvním duelem.";
         this.flushPending();
         this.apply(() => {
-          this.s.questionIndex = cmd.index;
-          this.s.round = this.newRound(this.questions[cmd.index]);
-          this.s.view = "board";
-          this.buzzer = { open: false, winner: null };
-          this.emitFx({ kind: "intro", number: cmd.index + 1 });
+          this.s.bracket = this.buildBracket();
+          this.s.matchId = null;
+          this.s.round = null;
+          this.s.teams.forEach((t) => (t.score = 0));
+          this.buzzer = closedBuzzer();
+          this.s.view = "bracket";
+          this.emitFx({ kind: "draw" });
+        });
+        return null;
+      }
+      case "startDuel": {
+        const b = this.s.bracket;
+        if (!b) return "Nejdřív vylosuj pavouka.";
+        const m = cmd.matchId ? b.matches.find((x) => x.id === cmd.matchId) : nextMatch(b);
+        if (!m) return "Žádný další duel — vyhlas vítěze.";
+        if (!m.a || !m.b || m.winner) return "Tenhle duel se nedá hrát.";
+        this.flushPending();
+        this.apply(() => {
+          this.s.matchId = m.id;
+          this.s.round = null;
+          this.buzzer = closedBuzzer();
+          this.s.view = "duel";
+          this.emitFx({ kind: "duel", matchId: m.id });
+        });
+        return null;
+      }
+      case "setTurn": {
+        const round = this.s.round;
+        if (!round) return "Není rozehraná otázka.";
+        const m = this.currentMatch();
+        if (m && cmd.teamId !== m.a && cmd.teamId !== m.b) return "Tým v tomhle duelu nehraje.";
+        if (!this.s.teams.some((t) => t.id === cmd.teamId)) return "Tým neexistuje.";
+        this.flushPending();
+        this.apply(() => {
+          round.turn = cmd.teamId;
+          if (round.phase === "question") {
+            round.phase = "play";
+            this.buzzer = { ...this.buzzer, open: false, winner: cmd.teamId };
+          }
+          this.emitFx({ kind: "turn", teamId: cmd.teamId });
+        });
+        return null;
+      }
+      case "endDuel": {
+        const m = this.currentMatch();
+        if (!m || !this.s.bracket) return "Neběží žádný duel.";
+        if (cmd.winnerId !== m.a && cmd.winnerId !== m.b) return "Vítěz musí být jeden ze soupeřů.";
+        this.flushPending();
+        this.apply(() => {
+          m.winner = cmd.winnerId;
+          this.propagate(m);
+          this.s.matchId = null;
+          this.s.round = null;
+          this.buzzer = closedBuzzer();
+          this.s.view = "bracket";
+          this.emitFx({ kind: "advance", matchId: m.id, teamId: cmd.winnerId });
         });
         return null;
       }
@@ -368,8 +469,14 @@ export class Game {
           if (!round || round.questionId !== q.id || round.revealed[cmd.index]) return;
           const points = q.answers[cmd.index].points * q.multiplier;
           const t = cmd.teamId ? this.s.teams.find((x) => x.id === cmd.teamId) : undefined;
-          if (t) t.score += points;
+          if (t) {
+            t.score += points;
+            const m = this.currentMatch();
+            if (m?.a === t.id) m.scoreA += points;
+            else if (m?.b === t.id) m.scoreB += points;
+          }
           round.revealed[cmd.index] = { by: t?.id ?? null, points };
+          round.phase = "play";
           this.s.view = "board";
           this.emitFx({ kind: "flip", index: cmd.index, teamId: t?.id ?? null, points: t ? points : 0 });
         });
@@ -384,6 +491,12 @@ export class Game {
           if (!round || !this.s.teams.some((t) => t.id === team.id)) return;
           const count = Math.min(MAX_STRIKES, (round.strikes[team.id] ?? 0) + 1);
           round.strikes[team.id] = count;
+          // po třetí chybě přechází tah na soupeře (šance ukrást body)
+          const m = this.currentMatch();
+          const rival = m ? (m.a === team.id ? m.b : m.b === team.id ? m.a : null) : null;
+          if (count >= MAX_STRIKES && round.turn === team.id && rival && (round.strikes[rival] ?? 0) < MAX_STRIKES) {
+            round.turn = rival;
+          }
           this.s.view = "board";
           this.emitFx({ kind: "strike", teamId: team.id, count });
         });
@@ -420,6 +533,8 @@ export class Game {
         this.s.view = snap.view;
         this.s.questionIndex = snap.questionIndex;
         this.s.round = snap.round;
+        this.s.bracket = snap.bracket;
+        this.s.matchId = snap.matchId;
         this.buzzer = snap.buzzer;
         this.emitFx({ kind: "undo" });
         this.changed();
@@ -428,6 +543,8 @@ export class Game {
       case "setView": {
         this.flushPending();
         if (cmd.view === "board" && !this.s.round) return "Nejdřív vyber otázku.";
+        if (cmd.view === "bracket" && !this.s.bracket) return "Nejdřív vylosuj pavouka.";
+        if (cmd.view === "duel" && !this.currentMatch()) return "Neběží žádný duel.";
         this.apply(() => {
           this.s.view = cmd.view;
           if (cmd.view === "final") this.emitFx({ kind: "final" });
@@ -436,9 +553,11 @@ export class Game {
         return null;
       }
       case "buzzer": {
-        if (cmd.action === "open") this.buzzer = { open: true, winner: null };
-        else if (cmd.action === "close") this.buzzer = { open: false, winner: this.buzzer.winner };
-        else this.buzzer = { open: false, winner: null };
+        const m = this.currentMatch();
+        const teams = m?.a && m.b ? [m.a, m.b] : null;
+        if (cmd.action === "open") this.buzzer = { open: true, winner: null, teams };
+        else if (cmd.action === "close") this.buzzer = { ...this.buzzer, open: false };
+        else this.buzzer = closedBuzzer();
         this.changed();
         return null;
       }
@@ -473,6 +592,7 @@ export class Game {
         this.apply(() => {
           this.s.teams = this.s.teams.filter((t) => t.id !== cmd.id);
           if (this.s.round) delete this.s.round.strikes[cmd.id];
+          this.walkover(cmd.id);
         });
         this.io.to("teams").emit("team:removed", cmd.id);
         return null;
@@ -524,8 +644,10 @@ export class Game {
         this.s.view = "lobby";
         this.s.questionIndex = -1;
         this.s.round = null;
+        this.s.bracket = null;
+        this.s.matchId = null;
         this.s.joinCode = code4();
-        this.buzzer = { open: false, winner: null };
+        this.buzzer = closedBuzzer();
         this.undoStack = [];
         this.teamSockets.clear();
         this.io.to("teams").emit("team:removed", "*");
@@ -543,8 +665,10 @@ export class Game {
         this.s.view = "lobby";
         this.s.questionIndex = -1;
         this.s.round = null;
+        this.s.bracket = null;
+        this.s.matchId = null;
         this.s.joinCode = code4();
-        this.buzzer = { open: false, winner: null };
+        this.buzzer = closedBuzzer();
         this.undoStack = [];
         this.teamSockets.clear();
         this.io.to("teams").emit("team:removed", "*");
@@ -559,7 +683,100 @@ export class Game {
   }
 
   private newRound(q: Question): Round {
-    return { questionId: q.id, revealed: q.answers.map(() => null), strikes: {} };
+    return { questionId: q.id, matchId: this.s.matchId, phase: "question", turn: null, revealed: q.answers.map(() => null), strikes: {} };
+  }
+
+  private currentMatch(): Match | null {
+    return this.s.bracket?.matches.find((m) => m.id === this.s.matchId) ?? null;
+  }
+
+  /** otázka se ukáže jen jako text — karty až po bzučáku; bzučet smí jen dva týmy v duelu */
+  private openQuestion(index: number): string | null {
+    const q = this.questions[index];
+    if (!q) return "Otázka neexistuje.";
+    const m = this.currentMatch();
+    this.flushPending();
+    this.apply(() => {
+      this.s.questionIndex = index;
+      this.s.round = this.newRound(q);
+      this.s.view = "board";
+      this.buzzer = { open: true, winner: null, teams: m?.a && m.b ? [m.a, m.b] : null };
+      this.emitFx({ kind: "intro", number: index + 1 });
+    });
+    return null;
+  }
+
+  private buildBracket(): Bracket {
+    const ids = shuffle(this.s.teams.map((t) => t.id));
+    const size = 2 ** Math.ceil(Math.log2(ids.length));
+    const rounds = Math.log2(size);
+    const order = seedOrder(size);
+    const matches: Match[] = [];
+    for (let r = 0; r < rounds; r++) {
+      const count = size / 2 ** (r + 1);
+      for (let i = 0; i < count; i++) {
+        const a = r === 0 ? (ids[order[2 * i] - 1] ?? null) : null;
+        const b = r === 0 ? (ids[order[2 * i + 1] - 1] ?? null) : null;
+        matches.push({ id: `r${r}m${i}`, round: r, index: i, a, b, winner: null, scoreA: 0, scoreB: 0, bye: r === 0 && (!a || !b) });
+      }
+    }
+    const bracket: Bracket = { size, rounds, matches };
+    for (const m of matches.filter((x) => x.bye)) {
+      m.winner = m.a ?? m.b;
+      this.propagate(m, bracket);
+    }
+    return bracket;
+  }
+
+  /** vítěz duelu postoupí do dalšího kola */
+  private propagate(m: Match, bracket = this.s.bracket) {
+    const next = bracket?.matches.find((x) => x.round === m.round + 1 && x.index === Math.floor(m.index / 2));
+    if (!next) return;
+    if (m.index % 2 === 0) next.a = m.winner;
+    else next.b = m.winner;
+  }
+
+  /** odstraněný tým: soupeř v nerozhodnutém duelu postupuje bez boje */
+  private walkover(teamId: string) {
+    const b = this.s.bracket;
+    if (!b) return;
+    for (const m of b.matches) {
+      if (m.winner || (m.a !== teamId && m.b !== teamId)) continue;
+      if (m.a === teamId) m.a = null;
+      if (m.b === teamId) m.b = null;
+      const rival = m.a ?? m.b;
+      if (rival && m.round === 0) {
+        m.winner = rival;
+        m.bye = true;
+        this.propagate(m);
+      } else if (rival && this.s.matchId === m.id) {
+        m.winner = rival;
+        this.propagate(m);
+      }
+      if (this.s.matchId === m.id) {
+        this.s.matchId = null;
+        this.s.round = null;
+        this.buzzer = closedBuzzer();
+        if (this.s.view === "board" || this.s.view === "duel") this.s.view = "bracket";
+      }
+    }
+  }
+
+  private async importSurvey(): Promise<string | null> {
+    const data = await this.storage.readSurvey?.();
+    if (!data) return "Firebase není nastavený — dotazník nejde načíst.";
+    const qs = buildFromSurvey(data.questions, data.responses, () => id());
+    if (!qs.length) return "V dotazníku zatím nejsou odpovědi.";
+    this.cancelPendingSilently();
+    this.questions = shuffle(qs);
+    this.writeQuestions();
+    this.s.questionIndex = -1;
+    this.s.round = null;
+    this.buzzer = closedBuzzer();
+    if (this.s.view === "board") this.s.view = this.s.matchId ? "duel" : this.s.bracket ? "bracket" : "lobby";
+    this.undoStack = [];
+    this.changed();
+    return null;
   }
 
   /** zpožděná akce — admin ji může během prodlevy zrušit */
@@ -590,7 +807,15 @@ export class Game {
 
   private apply(fn: () => void) {
     this.undoStack.push(
-      clone({ teams: this.s.teams, view: this.s.view, questionIndex: this.s.questionIndex, round: this.s.round, buzzer: this.buzzer }),
+      clone({
+        teams: this.s.teams,
+        view: this.s.view,
+        questionIndex: this.s.questionIndex,
+        round: this.s.round,
+        bracket: this.s.bracket,
+        matchId: this.s.matchId,
+        buzzer: this.buzzer,
+      }),
     );
     if (this.undoStack.length > 40) this.undoStack.shift();
     fn();
@@ -624,6 +849,8 @@ export class Game {
             }
           : null,
       round,
+      bracket: this.s.bracket,
+      matchId: this.s.matchId,
       buzzer: this.buzzer,
       fx: this.fx,
       suspense: this.pending !== null,

@@ -6,10 +6,11 @@ import { Bubble, Logo } from "@/components/Logo";
 import { Qr } from "@/components/Qr";
 import { BigX, CountUp, XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
-import { Smartphone, Volume2, VolumeX } from "lucide-react";
+import { Smartphone, Trophy, Volume2, VolumeX } from "lucide-react";
 import { getSocket, resolveBaseUrl, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
 import { audioReady, isMuted, measure, play, setMuted, soundCheck, startSuspense, unlockAudio } from "@/lib/sound";
-import { MAX_STRIKES, type Fx, type PublicState, type Team } from "@/lib/types";
+import { BracketView, DuelView, podiumOrder } from "./Tournament";
+import { MAX_STRIKES, roundName, type Fx, type Match, type PublicState, type Team } from "@/lib/types";
 
 type Overlay =
   | { kind: "intro"; key: number; number: number; multiplier: number }
@@ -90,9 +91,13 @@ export function Screen() {
       case "buzz": {
         const t = team(fx.teamId);
         play("buzz");
-        if (t) showOverlay({ kind: "buzz", key: fx.id, team: t }, 2800);
+        if (t) showOverlay({ kind: "buzz", key: fx.id, team: t }, BUZZ_OVERLAY_MS);
         break;
       }
+      case "turn":
+        play("pop");
+        break;
+      // losování, duel a postup ozvučují samy komponenty (časování animací)
       case "join":
         play("pop");
         break;
@@ -152,6 +157,7 @@ export function Screen() {
   }, []);
 
   const base = st ? resolveBaseUrl(st) : "";
+  const match = st?.bracket?.matches.find((m) => m.id === st.matchId) ?? null;
 
   return (
     <main className={`stage ${suspense ? "suspense" : ""}`} ref={stageRef}>
@@ -159,14 +165,15 @@ export function Screen() {
 
       {st && (
         <>
-          {st.view !== "lobby" && st.view !== "intro" && (
+          {(st.view === "board" || st.view === "bracket") && (
             <div className="topbar">
               <Logo />
               <div className="topbar-right">
                 {st.view === "board" && st.question && (
-                  <span className="pill">
-                    Otázka {st.question.number} / {st.questionCount}
-                  </span>
+                  <>
+                    {match && st.bracket && <span className="pill">{roundName(match.round, st.bracket.rounds)}</span>}
+                    <span className="pill">Otázka {st.question.number}</span>
+                  </>
                 )}
               </div>
             </div>
@@ -188,14 +195,19 @@ export function Screen() {
                 <Board st={st} fx={lastFx} />
               </motion.div>
             )}
-            {st.view === "scoreboard" && (
-              <motion.div key="scores" className="view" {...viewMotion}>
-                <Scoreboard teams={st.teams} />
+            {st.view === "bracket" && st.bracket && (
+              <motion.div key="bracket" className="view" {...viewMotion}>
+                <BracketView st={st} fx={lastFx} />
+              </motion.div>
+            )}
+            {st.view === "duel" && match && (
+              <motion.div key={`duel-${match.id}`} className="view" {...viewMotion}>
+                <DuelView st={st} match={match} live={lastFx?.kind === "duel" && lastFx.matchId === match.id} />
               </motion.div>
             )}
             {st.view === "final" && (
               <motion.div key="final" className="view" {...viewMotion}>
-                <Final teams={st.teams} live={lastFx?.kind === "final"} />
+                <Final podium={podiumOrder(st)} live={lastFx?.kind === "final"} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -235,7 +247,7 @@ export function Screen() {
                   <TeamIcon name={overlay.team.icon} />
                 </span>
                 <span className="buzz-name">{overlay.team.name}</span>
-                <span className="buzz-sub">byli první!</span>
+                <span className="buzz-sub">{match ? "jsou na tahu!" : "byli první!"}</span>
               </div>
             </div>
           )}
@@ -375,15 +387,32 @@ function Lobby({ st, base }: { st: PublicState; base: string }) {
 // ───────────────────────────── DESKA ─────────────────────────────
 
 const REVEAL_STEP_MS = 650;
+const BUZZ_OVERLAY_MS = 2300;
+
+/** text otázky slovo po slově */
+function Words({ text, delay }: { text: string; delay: number }) {
+  return (
+    <>
+      {text.split(/\s+/).map((w, i) => (
+        <span key={i} className="w" style={{ animationDelay: `${delay + i * 70}ms` }}>
+          {w}{" "}
+        </span>
+      ))}
+    </>
+  );
+}
 
 function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
   const q = st.question!;
   const round = st.round!;
   const rows = Math.ceil(q.slots / 2);
   const teamById = useMemo(() => new Map(st.teams.map((t) => [t.id, t])), [st.teams]);
+  const match = st.bracket?.matches.find((m) => m.id === round.matchId) ?? null;
   const flipFx = fx?.kind === "flip" ? fx : null;
-  // po ohlášení otázky naskočí bublina a karty až za žlutým stěračem
+  const asking = round.phase === "question";
+  // po ohlášení otázky naskočí text až za žlutým stěračem, karty po bzučáku až za jeho oslavou
   const entering = fx?.kind === "intro" && fx.number === q.number;
+  const afterBuzz = fx?.kind === "buzz";
 
   // „Odkrýt zbytek“: karty se otáčí postupně od nejméně častých až k #1
   // st.fx (ne lastFx) — musí to být ve stejném vykreslení, kdy přijdou odkryté karty
@@ -408,62 +437,123 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
     const timers = [...lateOrder.values()].map((k) => setTimeout(() => play("softFlip"), 250 + k * REVEAL_STEP_MS));
     return () => timers.forEach(clearTimeout);
   }, [lateOrder]);
+  // karty přilétají se zvukem
+  useEffect(() => {
+    if (asking) return;
+    const base = afterBuzz ? BUZZ_OVERLAY_MS - 300 : 150;
+    const timers = Array.from({ length: q.slots }, (_, i) => setTimeout(() => play("tick"), base + i * 110));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asking]);
 
   return (
-    <section className={`board ${entering ? "enter" : ""}`}>
-      <div className="q-wrap">
+    <section className={`board ${asking ? "asking" : "playing"} ${entering ? "enter" : ""} ${afterBuzz ? "after-buzz" : ""}`}>
+      <motion.div layout transition={{ type: "spring", stiffness: 120, damping: 20 }} className="q-wrap">
         <div className="q-meta">{q.multiplier > 1 && <span className="pill y">Body ×{q.multiplier}</span>}</div>
         <Bubble className="q-bubble" tail="14%">
-          <h1 className="q-text">{q.text}</h1>
+          <h1 className="q-text">
+            <Words text={q.text} delay={entering ? 1350 : 150} />
+          </h1>
         </Bubble>
-      </div>
+        {asking && (
+          <div className="buzz-call" style={{ animationDelay: entering ? "2.4s" : "0.9s" }}>
+            <span className="buzz-call-dot" />
+            {match ? "Kdo bzučí první, hraje!" : "Kdo bzučí první?"}
+          </div>
+        )}
+      </motion.div>
 
-      <div className="cards" style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}>
-        {Array.from({ length: q.slots }, (_, i) => {
-          const a = q.answers[i];
-          const info = round.revealed[i];
-          const by = info?.by ? teamById.get(info.by) : undefined;
-          const justFlipped = flipFx?.index === i;
-          const late = lateOrder.get(i);
-          return (
-            <div
-              key={i}
-              className={`card ${a ? "open" : ""} ${justFlipped ? "flash" : ""}`}
-              style={{ ["--i" as string]: i }}
-            >
-              <div className="card-inner" style={late !== undefined ? { transitionDelay: `${late * REVEAL_STEP_MS}ms` } : undefined}>
-                <div className="card-face card-front">
-                  <Bubble className="card-num" tail="34%">
-                    {i + 1}
-                  </Bubble>
-                </div>
-                <div className={`card-face card-back ${info && !info.by ? "dim" : ""}`}>
-                  {a && (
-                    <>
-                      <span className="card-rank">{i + 1}</span>
-                      <span className="card-text">{a.text}</span>
-                      {by && (
-                        <span className="card-by">
-                          <TeamIcon name={by.icon} />
+      {!asking && (
+        <div className="cards" style={{ gridTemplateRows: `repeat(${rows}, 1fr)` }}>
+          {Array.from({ length: q.slots }, (_, i) => {
+            const a = q.answers[i];
+            const info = round.revealed[i];
+            const by = info?.by ? teamById.get(info.by) : undefined;
+            const justFlipped = flipFx?.index === i;
+            const late = lateOrder.get(i);
+            return (
+              <div key={i} className={`card ${a ? "open" : ""} ${justFlipped ? "flash" : ""}`} style={{ ["--i" as string]: i }}>
+                <div className="card-inner" style={late !== undefined ? { transitionDelay: `${late * REVEAL_STEP_MS}ms` } : undefined}>
+                  <div className="card-face card-front">
+                    <Bubble className="card-num" tail="34%">
+                      {i + 1}
+                    </Bubble>
+                  </div>
+                  <div className={`card-face card-back ${info && !info.by ? "dim" : ""}`}>
+                    {a && (
+                      <>
+                        <span className="card-rank">{i + 1}</span>
+                        <span className="card-text" style={{ ["--len" as string]: Math.max(10, a.text.length) }}>
+                          {a.text}
                         </span>
-                      )}
-                      <span className="card-pts">{a.points}</span>
-                    </>
-                  )}
+                        {by && (
+                          <span className="card-by">
+                            <TeamIcon name={by.icon} />
+                          </span>
+                        )}
+                        <span className="card-pts">{a.points}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
+                {justFlipped && flipFx.points > 0 && (
+                  <span className="plus" key={flipFx.id}>
+                    +{flipFx.points}
+                  </span>
+                )}
               </div>
-              {justFlipped && flipFx.points > 0 && (
-                <span className="plus" key={flipFx.id}>
-                  +{flipFx.points}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      <TeamBar st={st} fx={fx} />
+      {match ? <DuelBar st={st} match={match} fx={fx} /> : <TeamBar st={st} fx={fx} />}
     </section>
+  );
+}
+
+/** souboj dvou týmů dole na desce — „na tahu“ plynule přejíždí mezi stranami */
+function DuelBar({ st, match, fx }: { st: PublicState; match: Match; fx: Fx | null }) {
+  const round = st.round!;
+  const hitTeam = fx?.kind === "flip" ? fx.teamId : null;
+  const side = (id: string | null, right: boolean) => {
+    const t = st.teams.find((x) => x.id === id);
+    if (!t) return <div className="duelbar-side" />;
+    const n = round.strikes[t.id] ?? 0;
+    const onTurn = round.turn === t.id;
+    return (
+      <div className={`duelbar-side ${right ? "right" : ""} ${onTurn ? "turn" : ""} ${n >= MAX_STRIKES ? "out" : ""}`}>
+        <span className="em">
+          <TeamIcon name={t.icon} />
+        </span>
+        <div className="duelbar-info">
+          <span className="duelbar-name">{t.name}</span>
+          <span className="strikes">
+            {Array.from({ length: MAX_STRIKES }, (_, i) => (
+              <span key={i} className={`strike ${i < n ? "on" : ""}`}>
+                {i < n && <XIcon />}
+              </span>
+            ))}
+          </span>
+        </div>
+        <span className="duelbar-score">
+          <CountUp value={right ? match.scoreB : match.scoreA} delay={600} />
+        </span>
+        {onTurn && (
+          <motion.span layoutId="turn-badge" className="turn-badge" transition={{ type: "spring", stiffness: 260, damping: 26 }}>
+            Na tahu
+          </motion.span>
+        )}
+        {hitTeam === t.id && fx && <span className="chip-flash" key={fx.id} />}
+      </div>
+    );
+  };
+  return (
+    <div className="duelbar">
+      {side(match.a, false)}
+      <span className="duelbar-vs">VS</span>
+      {side(match.b, true)}
+    </div>
   );
 }
 
@@ -477,8 +567,8 @@ function TeamBar({ st, fx }: { st: PublicState; fx: Fx | null }) {
         return (
           <motion.div layout key={t.id} className={`chip ${n >= MAX_STRIKES ? "out" : ""} ${t.online ? "" : "offline"}`}>
             <span className="em">
-                  <TeamIcon name={t.icon} />
-                </span>
+              <TeamIcon name={t.icon} />
+            </span>
             <span className="chip-name">{t.name}</span>
             <div className="chip-row">
               <span className="chip-score">
@@ -500,65 +590,10 @@ function TeamBar({ st, fx }: { st: PublicState; fx: Fx | null }) {
   );
 }
 
-// ───────────────────────────── ŽEBŘÍČEK ─────────────────────────────
-
-function Scoreboard({ teams }: { teams: Team[] }) {
-  const sorted = [...teams].sort((a, b) => b.score - a.score);
-  const max = Math.max(1, ...sorted.map((t) => t.score));
-  const [grown, setGrown] = useState(false);
-  const pct = (score: number) => (grown ? Math.max(3, (score / max) * 100) : 0);
-  useEffect(() => {
-    const t = setTimeout(() => setGrown(true), 250);
-    return () => clearTimeout(t);
-  }, []);
-
-  return (
-    <section className="scores">
-      <h1 className="view-title">
-        Průběžné <em>pořadí</em>
-      </h1>
-      <div className="score-rows">
-        {sorted.map((t, i) => (
-          <motion.div
-            layout
-            key={t.id}
-            className="score-row"
-            initial={{ opacity: 0, x: -60 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: (sorted.length - 1 - i) * 0.18, type: "spring", stiffness: 260, damping: 26 }}
-          >
-            <span className="score-rank">{i + 1}.</span>
-            <span className="em">
-                  <TeamIcon name={t.icon} />
-                </span>
-            <div className="score-track">
-              <div className="score-fill" style={{ width: `${pct(t.score)}%` }} />
-              {[false, true].map((onFill) => (
-                <div
-                  key={String(onFill)}
-                  className={`score-label ${onFill ? "on-fill" : ""}`}
-                  style={onFill ? { clipPath: `inset(0 ${100 - pct(t.score)}% 0 0)` } : undefined}
-                  aria-hidden={onFill}
-                >
-                  <span>{t.name}</span>
-                  <b>
-                    <CountUp value={grown ? t.score : 0} duration={1400} />
-                  </b>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 // ───────────────────────────── FINÁLE ─────────────────────────────
 
-function Final({ teams, live }: { teams: Team[]; live: boolean }) {
-  const sorted = [...teams].sort((a, b) => b.score - a.score);
-  const [first, second, third] = sorted;
+function Final({ podium, live }: { podium: Team[]; live: boolean }) {
+  const [first, second, third] = podium;
 
   // 3. místo → 2. místo → buben → vítěz
   useEffect(() => {
@@ -621,7 +656,9 @@ function Final({ teams, live }: { teams: Team[]; live: boolean }) {
           />
         ))}
       </div>
-      <span className="final-kicker">Vítěz večera</span>
+      <span className="final-kicker">
+        <Trophy className="inline-ic" /> Vítěz turnaje
+      </span>
       <div className="podium">
         <Pod t={second} place={2} h={12} />
         <Pod t={first} place={1} h={18} />
@@ -648,7 +685,7 @@ function Pod({ t, place, h }: { t?: Team; place: number; h: number }) {
       <span className="pod-name">{t.name}</span>
       <div className="pod-block" style={{ height: `calc(var(--u) * ${h})` }}>
         <span>
-          {place}.<small>{t.score} bodů</small>
+          {place}.<small>{place === 1 ? "šampion" : place === 2 ? "finalista" : "semifinále"}</small>
         </span>
       </div>
     </div>
@@ -694,7 +731,7 @@ function ShowIntro({ teams, live }: { teams: Team[]; live: boolean }) {
           ))}
         </div>
       </div>
-      <p className="si-ready">Připravte se na první otázku</p>
+      <p className="si-ready">Za chvíli losujeme pavouka</p>
     </section>
   );
 }

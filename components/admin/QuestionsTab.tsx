@@ -19,6 +19,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
   const [dirty, setDirty] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [json, setJson] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const lastServer = useRef(st.questions);
 
   // změny ze serveru převzít, pokud zrovna nic needituju
@@ -44,6 +45,27 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
 
   return (
     <div className="adm-body">
+      <section className="card-a import-card">
+        <h3 className="h3">Otázky z dotazníku</h3>
+        <p className="mute small">
+          Spočítá odpovědi z dotazníku: u každé otázky 6 nejčastějších, body = jejich podíl hlasů (dohromady 100). Pořadí otázek se zamíchá. Odpovědi pak můžeš níž ručně učesat (sloučit „Kouří“ a „Jde kouřit“).
+          Nahradí současné otázky ({st.questions.length}).
+        </p>
+        <button
+          className="btn btn-y btn-block"
+          disabled={importing}
+          onClick={async () => {
+            if (dirty && !confirm("Máš neuložené změny — zahodit je?")) return;
+            if (!confirm("Načíst otázky z dotazníku? Současné otázky se nahradí.")) return;
+            setImporting(true);
+            if (await cmd({ type: "importSurvey" })) setDirty(false);
+            setImporting(false);
+          }}
+        >
+          {importing ? "Načítám…" : "Načíst z dotazníku a zamíchat"}
+        </button>
+      </section>
+
       <section className="card-a">
         <p className="mute small">
           Karta č. 1 = nejčastější odpověď. Po uložení se odpovědi samy seřadí podle počtu hlasů. Prázdné odpovědi se zahodí.

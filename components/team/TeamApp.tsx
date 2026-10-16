@@ -6,7 +6,7 @@ import { Bubble, Logo } from "@/components/Logo";
 import { CountUp, XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
 import { emitAck, getSocket, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { MAX_STRIKES, type Ack, type PublicState, type Team } from "@/lib/types";
+import { champion, MAX_STRIKES, roundName, type Ack, type PublicState, type Team } from "@/lib/types";
 
 const TEAM_KEY = "chc-team";
 
@@ -77,8 +77,13 @@ export function TeamApp({ initialCode }: { initialCode: string }) {
     } else if (fx.kind === "strike" && fx.teamId === teamId) {
       vibrate(500);
       setFlash({ key: fx.id, kind: "strike", count: fx.count });
-    } else if (fx.kind === "buzz") {
-      vibrate(fx.teamId === teamId ? [80, 50, 80, 50, 200] : 60);
+    } else if (fx.kind === "buzz" || fx.kind === "turn") {
+      if (fx.teamId === teamId) vibrate([80, 50, 80, 50, 200]);
+    } else if (fx.kind === "duel") {
+      const m = st.bracket?.matches.find((x) => x.id === fx.matchId);
+      if (m && (m.a === teamId || m.b === teamId)) vibrate([60, 40, 60]);
+    } else if (fx.kind === "advance" && fx.teamId === teamId) {
+      vibrate([40, 60, 40, 60, 160]);
     }
   }, [st, teamId]);
 
@@ -234,76 +239,182 @@ function JoinForm({ initialCode, onJoined }: { initialCode: string; onJoined: (t
 }
 
 function TeamView({ st, team }: { st: PublicState; team: Team }) {
-  const sorted = [...st.teams].sort((a, b) => b.score - a.score);
-  const rank = sorted.findIndex((t) => t.id === team.id) + 1;
-  const strikes = st.round?.strikes[team.id] ?? 0;
-  const winner = st.buzzer.winner ? st.teams.find((t) => t.id === st.buzzer.winner) : undefined;
+  const b = st.bracket;
+  const match = b?.matches.find((m) => m.id === st.matchId) ?? null;
+  const inMatch = !!match && (match.a === team.id || match.b === team.id);
+  const rival = inMatch ? st.teams.find((t) => t.id === (match!.a === team.id ? match!.b : match!.a)) : undefined;
+  const nameOf = (id: string | null) => st.teams.find((t) => t.id === id)?.name ?? "?";
+  const lostIn = b?.matches.find((m) => m.winner && m.winner !== team.id && (m.a === team.id || m.b === team.id));
+  const champId = champion(b);
+  const myNext = b?.matches.find((m) => !m.winner && (m.a === team.id || m.b === team.id));
+  const round = st.round;
+  const canBuzz = st.buzzer.open && (!st.buzzer.teams || st.buzzer.teams.includes(team.id));
+  const strikes = round?.strikes[team.id] ?? 0;
+  const stage = match && b ? roundName(match.round, b.rounds) : myNext && b ? roundName(myNext.round, b.rounds) : null;
 
-  const status =
-    st.view === "lobby"
-      ? "Jste ve hře! Čekáme, až moderátor spustí show…"
-      : st.view === "intro"
-        ? "Show začíná! Koukejte na projektor."
-        : st.view === "scoreboard"
-        ? "Koukejte na projektor — průběžné pořadí!"
-        : st.view === "final"
-          ? rank === 1
-            ? "VYHRÁLI JSTE!"
-            : `Konec hry — skončili jste ${rank}.`
-          : null;
+  let body: React.ReactNode;
+  if (canBuzz) {
+    body = <BuzzButton key="buzz" question={st.question?.text} />;
+  } else if (st.view === "final") {
+    body = (
+      <Panel key="final" tone={champId === team.id ? "win" : "dark"} big={champId === team.id ? "ŠAMPIONI!" : "Konec turnaje"}>
+        {champId === team.id ? "Vyhráli jste celou show!" : `Vítěz: ${nameOf(champId)}`}
+      </Panel>
+    );
+  } else if (st.view === "board" && round && inMatch) {
+    const mine = round.turn === team.id;
+    body = (
+      <div key="play" className="tm-stack">
+        {round.phase === "question" ? (
+          <Panel tone="dark" big="Čekejte…">Bzučák se za chvíli odemkne.</Panel>
+        ) : mine ? (
+          <Panel tone="win" big="JSTE NA TAHU" pulse>
+            Hádejte odpověď nahlas!
+          </Panel>
+        ) : (
+          <Panel tone="dark" big={`Na tahu: ${nameOf(round.turn)}`}>
+            {strikes >= MAX_STRIKES ? "Máte 3 chyby — čekejte." : "Poslouchejte, třeba přijde vaše šance."}
+          </Panel>
+        )}
+        <DuelScore st={st} me={team.id} />
+        {st.question && <QuestionCard text={st.question.text} strikes={strikes} />}
+      </div>
+    );
+  } else if (st.view === "duel" && inMatch) {
+    body = (
+      <Panel key="duel" tone="win" big="Jdete na to!" pulse>
+        Duel proti <b>{rival?.name}</b>. Pošlete zástupce ke stolu!
+      </Panel>
+    );
+  } else if (lostIn && b) {
+    body = (
+      <Panel key="out" tone="dark" big="Vypadli jste">
+        {roundName(lostIn.round, b.rounds)} · porazil vás tým {nameOf(lostIn.winner)}. Fanděte dál!
+      </Panel>
+    );
+  } else if (match && (st.view === "duel" || st.view === "board")) {
+    body = (
+      <div key="watch" className="tm-stack">
+        <Panel tone="dark" big="Teď hrají">
+          {nameOf(match.a)} vs {nameOf(match.b)}
+        </Panel>
+        <DuelScore st={st} me={team.id} />
+      </div>
+    );
+  } else if (st.view === "bracket" && myNext && b) {
+    const opp = myNext.a === team.id ? myNext.b : myNext.a;
+    body = (
+      <Panel key="next" tone="dark" big={opp ? `Soupeř: ${nameOf(opp)}` : "Postupujete!"}>
+        {opp ? `${roundName(myNext.round, b.rounds)} — koukejte na pavouka.` : "Čekáte, kdo vyhraje duel před vámi."}
+      </Panel>
+    );
+  } else {
+    body = (
+      <Panel key="wait" tone="dark" big={st.view === "lobby" ? "Jste ve hře!" : "Koukejte na projektor"}>
+        {st.view === "lobby" ? "Čekáme, až moderátor spustí show…" : st.view === "intro" ? "Show začíná!" : "Za chvíli se losuje pavouk."}
+      </Panel>
+    );
+  }
 
   return (
     <div className="tm-view">
       <header className="tm-head">
         <Logo className="tm-logo" />
-        <span className="tm-rank">
-          {rank}.<small> z {st.teams.length}</small>
-        </span>
+        {stage && <span className="tm-stage">{stage}</span>}
       </header>
 
-      <section className="tm-hero">
+      <section className={`tm-hero ${canBuzz ? "small" : ""}`}>
         <Bubble className="tm-em-bubble" tail="58%">
           <span className="tm-em">
             <TeamIcon name={team.icon} />
           </span>
         </Bubble>
         <h1 className="tm-name">{team.name}</h1>
-        <div className="tm-score">
-          <CountUp value={team.score} delay={500} />
-          <small>bodů</small>
-        </div>
       </section>
 
-      {st.buzzer.open ? (
-        <button
-          className="tm-buzzer"
-          onPointerDown={() => {
-            vibrate(40);
-            getSocket().emit("team:buzz");
-          }}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={canBuzz ? "buzz" : `${st.view}-${round?.phase}-${round?.turn}-${st.matchId}`}
+          className="tm-body"
+          initial={{ opacity: 0, y: 24, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -16, scale: 0.97 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         >
-          <span>BZUČ!</span>
-        </button>
-      ) : winner ? (
-        <div className={`tm-card tm-buzz-res ${winner.id === team.id ? "win" : ""}`}>
-          {winner.id === team.id ? "Byli jste první! Odpovídejte!" : `Rychlejší: ${winner.name}`}
-        </div>
-      ) : status ? (
-        <div className="tm-card">{status}</div>
-      ) : st.question ? (
-        <div className="tm-card">
-          <span className="tm-q-label">Otázka {st.question.number}</span>
-          <p className="tm-q">{st.question.text}</p>
-          <div className="tm-strikes">
-            {Array.from({ length: MAX_STRIKES }, (_, i) => (
-              <span key={i} className={i < strikes ? "on" : ""}>
-                {i < strikes && <XIcon />}
-              </span>
-            ))}
-            <em>{strikes >= MAX_STRIKES ? "Vyřazeni z této otázky" : MAX_STRIKES - strikes === 1 ? "Zbývá poslední pokus" : `Zbývají ${MAX_STRIKES - strikes} pokusy`}</em>
-          </div>
-        </div>
-      ) : null}
+          {body}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function Panel({ tone, big, pulse, children }: { tone: "win" | "dark"; big: string; pulse?: boolean; children?: React.ReactNode }) {
+  return (
+    <div className={`tm-panel ${tone} ${pulse ? "pulse" : ""}`}>
+      <span className="tm-panel-big">{big}</span>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
+
+function DuelScore({ st, me }: { st: PublicState; me: string }) {
+  const m = st.bracket?.matches.find((x) => x.id === st.matchId);
+  if (!m) return null;
+  const side = (id: string | null, score: number) => {
+    const t = st.teams.find((x) => x.id === id);
+    return (
+      <div className={`tm-ds-side ${id === me ? "me" : ""} ${st.round?.turn === id ? "turn" : ""}`}>
+        <span className="tm-ds-ic">{t && <TeamIcon name={t.icon} />}</span>
+        <span className="tm-ds-name">{t?.name}</span>
+        <b>
+          <CountUp value={score} delay={400} />
+        </b>
+      </div>
+    );
+  };
+  return (
+    <div className="tm-ds">
+      {side(m.a, m.scoreA)}
+      <span className="tm-ds-vs">vs</span>
+      {side(m.b, m.scoreB)}
+    </div>
+  );
+}
+
+function QuestionCard({ text, strikes }: { text: string; strikes: number }) {
+  return (
+    <div className="tm-card">
+      <span className="tm-q-label">Otázka</span>
+      <p className="tm-q">{text}</p>
+      <div className="tm-strikes">
+        {Array.from({ length: MAX_STRIKES }, (_, i) => (
+          <span key={i} className={i < strikes ? "on" : ""}>
+            {i < strikes && <XIcon />}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** obří bzučák přes skoro celou obrazovku; po stisku hned ukáže „odesláno“ */
+function BuzzButton({ question }: { question?: string }) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <div className="tm-buzz-wrap">
+      {question && <p className="tm-buzz-q">{question}</p>}
+      <button
+        className={`tm-buzzer ${pressed ? "pressed" : ""}`}
+        onPointerDown={() => {
+          if (pressed) return;
+          setPressed(true);
+          vibrate(60);
+          getSocket().emit("team:buzz");
+        }}
+      >
+        <span>{pressed ? "…" : "BZUČ!"}</span>
+      </button>
+      <p className="tm-buzz-hint">{pressed ? "Odesláno — koukejte na projektor" : "Kdo dřív zmáčkne, hraje!"}</p>
     </div>
   );
 }

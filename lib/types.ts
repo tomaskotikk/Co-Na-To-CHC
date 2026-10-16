@@ -38,12 +38,44 @@ export type Team = {
   online: boolean;
 };
 
-export type View = "lobby" | "intro" | "board" | "scoreboard" | "final";
+export type View = "lobby" | "intro" | "bracket" | "duel" | "board" | "final";
 
 export type RevealInfo = { by: string | null; points: number };
 
+/** jeden duel v pavoukovi */
+export type Match = {
+  id: string;
+  /** 0 = první kolo, poslední = finále */
+  round: number;
+  /** pořadí v kole (shora) */
+  index: number;
+  a: string | null;
+  b: string | null;
+  winner: string | null;
+  /** body získané v tomhle duelu */
+  scoreA: number;
+  scoreB: number;
+  /** volný postup — soupeř nebyl (lichý počet týmů) */
+  bye: boolean;
+};
+
+export type Bracket = {
+  /** počet míst v prvním kole (mocnina 2) */
+  size: number;
+  rounds: number;
+  matches: Match[];
+};
+
+/** question = jen otázka a bzučáky, play = karty a hádání */
+export type DuelPhase = "question" | "play";
+
 export type Round = {
   questionId: string;
+  /** duel, ve kterém se otázka hraje (null = volná hra bez pavouka) */
+  matchId: string | null;
+  phase: DuelPhase;
+  /** tým na tahu (kdo první bzučel) */
+  turn: string | null;
   revealed: (RevealInfo | null)[];
   /** počet škrtů (X) na tým v aktuální otázce */
   strikes: Record<string, number>;
@@ -59,7 +91,11 @@ export type Fx =
   | { id: number; kind: "join"; teamId: string }
   | { id: number; kind: "undo" }
   | { id: number; kind: "final" }
-  | { id: number; kind: "showIntro" };
+  | { id: number; kind: "showIntro" }
+  | { id: number; kind: "draw" }
+  | { id: number; kind: "duel"; matchId: string }
+  | { id: number; kind: "turn"; teamId: string }
+  | { id: number; kind: "advance"; matchId: string; teamId: string };
 
 export type Pending = {
   id: number;
@@ -78,7 +114,8 @@ export type PublicQuestion = {
   answers: ({ text: string; points: number } | null)[];
 };
 
-export type Buzzer = { open: boolean; winner: string | null };
+/** teams = kdo smí bzučet (null = všichni) */
+export type Buzzer = { open: boolean; winner: string | null; teams: string[] | null };
 
 export type Settings = {
   delayMs: number;
@@ -95,6 +132,9 @@ export type PublicState = {
   questionIndex: number;
   question: PublicQuestion | null;
   round: Round | null;
+  bracket: Bracket | null;
+  /** právě hraný (nebo ohlášený) duel */
+  matchId: string | null;
   buzzer: Buzzer;
   fx: Fx;
   /** admin právě něco odklepl a běží prodleva — projektor stupňuje napětí (neví co) */
@@ -132,9 +172,30 @@ export type AdminCmd =
   | { type: "settings"; settings: Partial<Settings> }
   | { type: "resetScores" }
   | { type: "resetGame" }
-  | { type: "endShow" };
+  | { type: "endShow" }
+  | { type: "drawBracket" }
+  | { type: "startDuel"; matchId?: string }
+  | { type: "showQuestion" }
+  | { type: "setTurn"; teamId: string }
+  | { type: "endDuel"; winnerId: string }
+  | { type: "importSurvey" };
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export const MAX_STRIKES = 3;
-export const MAX_TEAMS = 12;
+/** pavouk je hezky čitelný do 8 týmů */
+export const MAX_TEAMS = 8;
+
+export function roundName(round: number, rounds: number) {
+  const fromEnd = rounds - 1 - round;
+  return fromEnd === 0 ? "Finále" : fromEnd === 1 ? "Semifinále" : fromEnd === 2 ? "Čtvrtfinále" : `${round + 1}. kolo`;
+}
+
+/** další duel, který se dá hrát (oba soupeři známí, ještě nerozhodnutý) */
+export function nextMatch(b: Bracket | null) {
+  return b?.matches.find((m) => !m.winner && m.a && m.b) ?? null;
+}
+
+export function champion(b: Bracket | null) {
+  return b?.matches.find((m) => m.round === b.rounds - 1)?.winner ?? null;
+}

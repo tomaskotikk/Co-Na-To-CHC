@@ -1095,3 +1095,266 @@ kbd {
   width: 60%;
   height: 60%;
 }
+
+/* ═════════ TURNAJ ═════════ */
+
+.seg6 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* akční lišta: po odkrytí „Další otázka“ + „Konec duelu“ */
+.actionbar:has(.wide + .wide) {
+  grid-template-columns: 1fr 2fr 2fr;
+}
+.actionbar:has(> .wide:last-child):not(:has(.wide + .wide)) {
+  grid-template-columns: 1fr 3.6fr;
+}
+.act-next.wide small {
+  font-size: 13px;
+}
+.act-next.btn-y {
+  background: var(--y) !important;
+}
+.act-buzz-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+}
+.act-buzz-txt small {
+  font-family: var(--font-b);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* import otázek */
+.import-card {
+  border-color: #3b3410;
+  background: linear-gradient(180deg, #1a1706, var(--ink-2));
+}
+
+/* přehled pavouka */
+.mt-round {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mt-round + .mt-round {
+  margin-top: 6px;
+}
+.mt {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ink);
+  border: 1px solid #2c2c2c;
+}
+.mt.next {
+  border: 2px solid var(--y);
+  box-shadow: 0 0 18px rgba(255, 213, 0, 0.2);
+}
+.mt-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 800;
+}
+.mt-team:last-of-type:not(:first-child) {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.mt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mt-team.win .mt-name {
+  color: var(--y);
+}
+.mt-team.lose {
+  opacity: 0.4;
+}
+.mt-team.tbd {
+  color: #555;
+}
+.mt-vs {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--mute);
+  text-transform: uppercase;
+}
+.mt-bye {
+  grid-column: 2 / 4;
+  justify-self: end;
+  font-size: 12px;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mt-flag {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--y);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* představení duelu */
+.duel-a {
+  align-items: center;
+  padding: 20px 14px;
+  border-color: #3b3410;
+  background: linear-gradient(180deg, #1a1706, var(--ink-2));
+}
+.duel-a-round {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--y);
+}
+.duel-a-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+}
+.duel-a-row .mt-team:first-child {
+  justify-content: flex-end;
+}
+.duel-a-vs {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid var(--y);
+  font-family: var(--font-d);
+  font-weight: 900;
+  color: var(--y);
+  padding-top: 3px;
+}
+.answers.preview .ans {
+  min-height: 44px;
+  border-color: #333;
+}
+.answers.preview .ans-t {
+  font-size: 15px;
+}
+
+/* hlavička duelu při otázce — klepnutím se přepne tah */
+.duel-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px;
+}
+.dh-side {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+  padding: 14px 10px 10px;
+  border-radius: 14px;
+  background: var(--ink);
+  border: 2px solid #2c2c2c;
+  text-align: left;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s,
+    opacity 0.25s;
+}
+.dh-side.turn {
+  border-color: var(--y);
+  box-shadow: 0 0 20px rgba(255, 213, 0, 0.25);
+}
+.dh-side.out {
+  opacity: 0.45;
+}
+.dh-name {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-score {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--y);
+}
+.dh-turn {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: var(--y);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.waiting-buzz {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  border: 2px solid var(--y);
+}
+.waiting-buzz b {
+  font-family: var(--font-d);
+  font-size: 18px;
+  color: var(--y);
+}
+.wb-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--y);
+  animation: wbPing 1.2s ease-out infinite;
+}
+@keyframes wbPing {
+  from {
+    box-shadow: 0 0 0 0 rgba(255, 213, 0, 0.7);
+  }
+  to {
+    box-shadow: 0 0 0 16px rgba(255, 213, 0, 0);
+  }
+}
+
+.team-grid.duo .team-btn {
+  padding: 16px 12px;
+}
+.team-btn.primary {
+  border-color: var(--y);
+  background: #1e1a05;
+  box-shadow: 0 0 18px rgba(255, 213, 0, 0.25);
+}

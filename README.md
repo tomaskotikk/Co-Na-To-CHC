@@ -18,17 +18,26 @@ Pak na notebooku otevři **http://localhost:3000** (důležité: `localhost`, je
 - Vlastní zvuky: dej mp3 do `public/sounds/` (jména v `public/sounds/README.md`), nahradí vestavěné.
 - Jednou klikni kamkoli na projektoru → zapne se zvuk (prohlížeč to vyžaduje).
 
-## Průběh
+## Průběh — turnaj (pavouk)
 
-1. Projektor ukáže **admin QR** → naskenuj telefonem → „Jsem admin“. QR zmizí, odkaz už nikdo jiný nepoužije.
-2. Lobby: týmy naskenují QR / zadají 4místný kód a jméno týmu. (Tým jde přidat i ručně v záložce Týmy.)
-3. Záložka **Hra**: „Spustit otázku“ → na projektoru intro + 6 zakrytých karet.
-4. Někdo se trefí → klepni na odpověď → vyber tým → karta se otočí a tým dostane body.
-5. Netrefí se → **BZZZ** → vyber tým → bzučák + velké X. Po 3 X je tým pro otázku vyřazený.
-6. Každá akce má **2 s prodlevu** s tlačítkem **ZRUŠIT** (nastavitelné v ⚙). Navíc **↶ Zpět** vrátí poslední akci.
-7. „Odkrýt zbytek“ ukáže neuhodnuté karty (bez bodů). Pak **›** další otázka, nakonec Pořadí a Finále.
+Hraje se tým proti týmu. Ideálně 6 týmů (2–8); doplní se do pavouka na 8 míst a dva vylosované týmy postoupí rovnou do semifinále.
 
-Volitelně: **Bzučáky** – týmům se na telefonu objeví velké tlačítko, kdo zmáčkne první, ukáže se na projektoru.
+1. Projektor ukáže **admin QR** → naskenuj telefonem → „Jsem admin“.
+2. Lobby: týmy naskenují QR / zadají kód a jméno týmu. (Tým bez telefonu přidáš v záložce Týmy.)
+3. **Start hry** → intro → **Vylosovat pavouka** (jména se protočí jako na automatu). Před prvním duelem jde přelosovat.
+4. **Spustit duel** → na projektoru „tým A vs tým B“, zástupci obou týmů jdou ke stolu.
+5. **Ukázat otázku** → na projektoru jen otázka, oba týmy v duelu mají na telefonu **BZUČ!**. Kdo dřív, je na tahu — teprve pak se ukáže 6 zakrytých karet.
+   (Tým bez telefonu: klepni v adminu nahoře na jeho jméno → je na tahu.)
+6. Trefa → klepni na odpověď → tým (na tahu je předvybraný). Vedle → **BZZZ** (jde rovnou na tým na tahu). Po 3 chybách přechází tah na soupeře.
+7. **Odkrýt zbytek** → pak **Další otázka** (stejný duel) nebo **Konec duelu** → vyber vítěze (vedoucí je předvybraný) → postoupí v pavoukovi.
+8. Po finále **Vyhlásit vítěze** → pódium (1. šampion, 2. finalista, 3. lepší semifinalista).
+
+Každá akce má prodlevu s tlačítkem **ZRUŠIT** (nastavitelné v ⚙) a **↶ Zpět** vrátí i postup v pavoukovi.
+
+### Otázky z dotazníku
+
+Admin › **Otázky › Načíst z dotazníku a zamíchat** — vezme odpovědi z dotazníku (repo CHC-Dotaznik, stejný Firebase), u každé otázky 6 nejčastějších (body = podíl hlasů, dohromady 100) a otázky zamíchá. Odpovědi pak jde ručně učesat (sloučit podobné).
+Otázky se drží jen ve Firebase a v `data/questions.json` na notebooku — **ne v gitu** (repo je veřejné a jsou v nich jména učitelů).
 
 ## Nová hra / reset
 
@@ -46,7 +55,7 @@ Na Renderu free se navíc server po ~15 min bez návštěvy uspí a při probuze
 
 V adminu záložka **Otázky** (jde i z notebooku – otevři stejný admin odkaz).
 Odpověď + počet lidí, co ji řekli. Po uložení se seřadí: karta 1 = nejčastější. Násobič ×2/×3 pro finálové otázky.
-Data jsou v `data/questions.json` (dá se upravit i ručně / přes JSON import). Stav hry se ukládá do `data/game.json`, takže restart notebooku nic nesmaže.
+Data jsou v `data/questions.json` (lokálně, mimo git) a ve Firebase. Stav hry se ukládá do `data/game.json` (a do Firebase), takže restart notebooku nic nesmaže.
 
 ## Síť – důležité na plese
 

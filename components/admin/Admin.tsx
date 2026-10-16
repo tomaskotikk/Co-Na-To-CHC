@@ -17,20 +17,34 @@ import {
   Play,
   RotateCcw,
   Settings,
+  Shuffle,
+  Swords,
   Trash2,
   Trophy,
   Undo2,
   type LucideIcon,
 } from "lucide-react";
 import { emitAck, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { MAX_STRIKES, type Ack, type AdminCmd, type AdminState, type Team, type View } from "@/lib/types";
+import {
+  champion,
+  MAX_STRIKES,
+  MAX_TEAMS,
+  nextMatch,
+  roundName,
+  type Ack,
+  type AdminCmd,
+  type AdminState,
+  type Match,
+  type Team,
+  type View,
+} from "@/lib/types";
 import { QuestionsTab } from "./QuestionsTab";
 
 const SESSION_KEY = "chc-admin-session";
 
 type Status = "connecting" | "claimable" | "invalid" | "admin" | "kicked" | "ended";
 type Tab = "game" | "teams" | "questions" | "settings";
-type Sheet = { kind: "flip"; index: number } | { kind: "strike" } | null;
+type Sheet = { kind: "flip"; index: number } | { kind: "strike" } | { kind: "endDuel" } | null;
 
 const buzz = (ms: number | number[] = 12) => {
   try {
@@ -194,12 +208,13 @@ type Cmd = (c: AdminCmd) => Promise<boolean>;
 const VIEWS: [View, string][] = [
   ["lobby", "Lobby"],
   ["intro", "Intro"],
+  ["bracket", "Pavouk"],
+  ["duel", "Duel"],
   ["board", "Otázka"],
-  ["scoreboard", "Pořadí"],
   ["final", "Finále"],
 ];
 
-type Step = "lobby" | "intro" | "question" | "scores" | "final";
+type Step = "lobby" | "intro" | "bracket" | "duel" | "ask" | "play" | "final";
 
 function stepOf(st: AdminState): Step {
   switch (st.view) {
@@ -207,59 +222,73 @@ function stepOf(st: AdminState): Step {
       return "lobby";
     case "intro":
       return "intro";
+    case "bracket":
+      return "bracket";
+    case "duel":
+      return "duel";
     case "board":
-      return st.round ? "question" : "lobby";
-    case "scoreboard":
-      return "scores";
+      return st.round ? (st.round.phase === "question" ? "ask" : "play") : st.bracket ? "bracket" : "lobby";
     case "final":
       return "final";
   }
 }
 
 const teamsWord = (n: number) => (n === 1 ? "tým" : n < 5 ? "týmy" : "týmů");
+const short = (round: number, rounds: number) => {
+  const n = roundName(round, rounds);
+  return n === "Finále" ? "F" : n === "Semifinále" ? "SF" : n === "Čtvrtfinále" ? "ČF" : `K${round + 1}`;
+};
 
 function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
   const [sheet, setSheet] = useState<Sheet>(null);
   const step = stepOf(st);
-  const total = st.questions.length;
-  const next = st.questionIndex + 1;
-  const hasNext = next < total;
+  const b = st.bracket;
+  const match = b?.matches.find((m) => m.id === st.matchId) ?? null;
+  const upcoming = nextMatch(b);
+  const champ = champion(b);
+  const name = (id: string | null) => st.teams.find((t) => t.id === id)?.name ?? "?";
+  const nextQ = st.questions[st.questionIndex + 1];
   const unrevealed = st.round?.revealed.some((r) => !r) ?? false;
+  const played = b?.matches.some((m) => !m.bye && m.winner) ?? false;
 
-  let primary: { icon?: LucideIcon; label: string; sub?: string; run: () => void; disabled?: boolean };
+  let primary: { icon?: LucideIcon; label: string; sub?: string; run: () => void; disabled?: boolean } | null = null;
   switch (step) {
     case "lobby":
       primary = {
         icon: Play,
         label: "Start hry",
-        sub: st.teams.length ? `${st.teams.length} ${teamsWord(st.teams.length)} ve hře` : "Čekáme na týmy…",
+        sub: st.teams.length >= 2 ? `${st.teams.length} ${teamsWord(st.teams.length)} ve hře` : "Čekáme na týmy (aspoň 2)…",
         run: () => cmd({ type: "startShow" }),
-        disabled: st.teams.length === 0,
+        disabled: st.teams.length < 2,
       };
       break;
     case "intro":
+      primary = { icon: Shuffle, label: "Vylosovat pavouka", run: () => cmd({ type: "drawBracket" }) };
+      break;
+    case "bracket":
+      primary = champ
+        ? { icon: Trophy, label: "Vyhlásit vítěze", sub: name(champ), run: () => cmd({ type: "setView", view: "final" }) }
+        : upcoming
+          ? {
+              icon: Swords,
+              label: "Spustit duel",
+              sub: `${name(upcoming.a)} vs ${name(upcoming.b)}`,
+              run: () => cmd({ type: "startDuel", matchId: upcoming.id }),
+            }
+          : { label: "Vylosovat pavouka", run: () => cmd({ type: "drawBracket" }) };
+      break;
+    case "duel":
       primary = {
         icon: Megaphone,
-        label: "Ohlásit 1. otázku",
-        run: () => cmd({ type: "goto", index: 0 }),
-        disabled: total === 0,
+        label: "Ukázat otázku",
+        sub: nextQ ? `Otázka ${st.questionIndex + 2} z ${st.questions.length}` : "Došly otázky!",
+        run: () => cmd({ type: "showQuestion" }),
+        disabled: !nextQ,
       };
-      break;
-    case "scores":
-      primary = hasNext
-        ? {
-            icon: Megaphone,
-            label: `Ohlásit ${next + 1}. otázku`,
-            sub: `${next + 1} z ${total}`,
-            run: () => cmd({ type: "goto", index: next }),
-          }
-        : { icon: Trophy, label: "Vyhlásit vítěze", run: () => cmd({ type: "setView", view: "final" }) };
       break;
     case "final":
       primary = { icon: PartyPopper, label: "Přehrát vyhlášení znovu", run: () => cmd({ type: "setView", view: "final" }) };
       break;
-    default:
-      primary = { label: "", run: () => {} };
   }
 
   return (
@@ -268,7 +297,7 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${step}-${st.questionIndex}`}
+          key={`${step}-${st.questionIndex}-${st.matchId}`}
           className="step"
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
@@ -277,8 +306,11 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         >
           {step === "lobby" && <LobbyStep st={st} />}
           {step === "intro" && <IntroStep cmd={cmd} />}
-          {step === "question" && <QuestionStep st={st} cmd={cmd} onFlip={(index) => setSheet({ kind: "flip", index })} />}
-          {step === "scores" && <ScoresStep st={st} cmd={cmd} />}
+          {step === "bracket" && <BracketStep st={st} cmd={cmd} played={played} />}
+          {step === "duel" && match && <DuelStep st={st} match={match} />}
+          {(step === "ask" || step === "play") && (
+            <QuestionStep st={st} cmd={cmd} match={match} onFlip={(index) => setSheet({ kind: "flip", index })} />
+          )}
           {step === "final" && <FinalStep st={st} cmd={cmd} />}
         </motion.div>
       </AnimatePresence>
@@ -287,52 +319,78 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 
       <div className="spacer" />
 
-      {step === "question" ? (
+      {step === "play" || step === "ask" ? (
         <div className="actionbar">
           <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
             <Undo2 className="act-ic" />
             <small>Zpět</small>
           </button>
-          <button className="btn act-buzz" disabled={st.teams.length === 0} onClick={() => setSheet({ kind: "strike" })}>
-            <XIcon className="act-x" />
-            BZZZ
-          </button>
           {unrevealed ? (
-            <button className="btn act-next" onClick={() => cmd({ type: "revealAll" })}>
-              <Eye className="act-ic" />
-              <small>Odkrýt zbytek</small>
-            </button>
+            <>
+              <button
+                className="btn act-buzz"
+                disabled={step === "ask"}
+                onClick={() =>
+                  match && st.round?.turn ? cmd({ type: "strike", teamId: st.round.turn }) : setSheet({ kind: "strike" })
+                }
+              >
+                <XIcon className="act-x" />
+                <span className="act-buzz-txt">
+                  BZZZ
+                  {match && st.round?.turn && <small>{name(st.round.turn)}</small>}
+                </span>
+              </button>
+              <button className="btn act-next" disabled={step === "ask"} onClick={() => cmd({ type: "revealAll" })}>
+                <Eye className="act-ic" />
+                <small>Odkrýt zbytek</small>
+              </button>
+            </>
+          ) : match ? (
+            <>
+              <button className="btn act-next wide" onClick={() => cmd({ type: "showQuestion" })} disabled={!nextQ}>
+                <Megaphone className="act-ic" />
+                <small>Další otázka</small>
+              </button>
+              <button className="btn btn-y act-next wide" onClick={() => setSheet({ kind: "endDuel" })}>
+                <Trophy className="act-ic" />
+                <small>Konec duelu</small>
+              </button>
+            </>
           ) : (
-            <button className="btn act-next" onClick={() => cmd({ type: "setView", view: "scoreboard" })}>
-              <Trophy className="act-ic" />
-              <small>Pořadí</small>
+            <button className="btn act-next wide" onClick={() => cmd({ type: "showQuestion" })} disabled={!nextQ}>
+              <Megaphone className="act-ic" />
+              <small>Další otázka</small>
             </button>
           )}
         </div>
       ) : (
-        <div className="actionbar single">
-          <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
-            <Undo2 className="act-ic" />
-            <small>Zpět</small>
-          </button>
-          <button className="btn btn-y act-primary" onClick={primary.run} disabled={primary.disabled}>
-            <span className="act-primary-row">
-              {primary.icon && <primary.icon className="act-ic" strokeWidth={2.6} />}
-              {primary.label}
-            </span>
-            {primary.sub && <small>{primary.sub}</small>}
-          </button>
-        </div>
+        primary && (
+          <div className="actionbar single">
+            <button className="btn act-undo" onClick={() => cmd({ type: "undo" })} disabled={!st.canUndo}>
+              <Undo2 className="act-ic" />
+              <small>Zpět</small>
+            </button>
+            <button className="btn btn-y act-primary" onClick={primary.run} disabled={primary.disabled}>
+              <span className="act-primary-row">
+                {primary.icon && <primary.icon className="act-ic" strokeWidth={2.6} />}
+                {primary.label}
+              </span>
+              {primary.sub && <small>{primary.sub}</small>}
+            </button>
+          </div>
+        )
       )}
 
       <TeamSheet
         sheet={sheet}
         st={st}
+        match={match}
         onClose={() => setSheet(null)}
         onPick={(teamId) => {
           if (!sheet) return;
           if (sheet.kind === "flip") cmd({ type: "flip", index: sheet.index, teamId });
-          else if (teamId) cmd({ type: "strike", teamId });
+          else if (sheet.kind === "strike" && teamId) cmd({ type: "strike", teamId });
+          else if (sheet.kind === "endDuel" && teamId) cmd({ type: "endDuel", winnerId: teamId });
           setSheet(null);
         }}
       />
@@ -341,19 +399,28 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 }
 
 function Stepper({ st, step }: { st: AdminState; step: Step }) {
-  const items: React.ReactNode[] = [
-    "Lobby",
-    "Intro",
-    ...st.questions.map((_, i) => `${i + 1}`),
-    <Trophy key="t" className="stp-ic" />,
+  const b = st.bracket;
+  const duels = b?.matches.filter((m) => !m.bye) ?? [];
+  type Item = { label: React.ReactNode; done: boolean; now: boolean };
+  const items: Item[] = [
+    { label: "Lobby", done: step !== "lobby", now: step === "lobby" },
+    { label: "Intro", done: !!b || step === "final", now: step === "intro" },
+    { label: "Pavouk", done: !!b && step !== "bracket" && step !== "intro", now: step === "bracket" },
+    ...duels.map((m) => {
+      const inRound = duels.filter((x) => x.round === m.round);
+      return { m, label: `${short(m.round, b!.rounds)}${inRound.length > 1 ? inRound.indexOf(m) + 1 : ""}` };
+    }).map(({ m, label }) => ({
+      label,
+      done: !!m.winner,
+      now: st.matchId === m.id,
+    })),
+    { label: <Trophy key="t" className="stp-ic" />, done: false, now: step === "final" },
   ];
-  const at =
-    step === "lobby" ? 0 : step === "intro" ? 1 : step === "final" ? items.length - 1 : 2 + Math.max(0, st.questionIndex);
   return (
     <div className="stepper">
-      {items.map((label, i) => (
-        <span key={i} className={`stp ${i < at ? "done" : ""} ${i === at ? "now" : ""}`}>
-          {label}
+      {items.map((it, i) => (
+        <span key={i} className={`stp ${it.done ? "done" : ""} ${it.now ? "now" : ""}`}>
+          {it.label}
         </span>
       ))}
     </div>
@@ -368,7 +435,7 @@ function LobbyStep({ st }: { st: AdminState }) {
           <h3 className="h3">Kód hry</h3>
           <span className="big-code">{st.joinCode}</span>
         </div>
-        <p className="mute small">Týmy naskenují QR na projektoru. Tým bez telefonu přidáš v záložce Týmy.</p>
+        <p className="mute small">Týmy naskenují QR na projektoru (ideálně 6, max {MAX_TEAMS}). Tým bez telefonu přidáš v záložce Týmy.</p>
       </div>
       <h3 className="h3">Připojené týmy · {st.teams.length}</h3>
       {st.teams.length === 0 ? (
@@ -412,7 +479,7 @@ function IntroStep({ cmd }: { cmd: Cmd }) {
         <Clapperboard className="step-ic" />
       </span>
       <h2 className="step-title">Na projektoru běží intro</h2>
-      <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), ohlas první otázku.</p>
+      <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), vylosuj pavouka.</p>
       <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "intro" })}>
         <RotateCcw className="btn-ic" /> Přehrát intro znovu
       </button>
@@ -420,14 +487,142 @@ function IntroStep({ cmd }: { cmd: Cmd }) {
   );
 }
 
-function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (i: number) => void }) {
+function TeamTag({ st, id, win, lose }: { st: AdminState; id: string | null; win?: boolean; lose?: boolean }) {
+  const t = st.teams.find((x) => x.id === id);
+  return (
+    <span className={`mt-team ${win ? "win" : ""} ${lose ? "lose" : ""} ${t ? "" : "tbd"}`}>
+      {t && (
+        <span className="t-ic">
+          <TeamIcon name={t.icon} />
+        </span>
+      )}
+      <span className="mt-name">{t?.name ?? "?"}</span>
+    </span>
+  );
+}
+
+function BracketStep({ st, cmd, played }: { st: AdminState; cmd: Cmd; played: boolean }) {
+  const b = st.bracket;
+  if (!b) return null;
+  const upcoming = nextMatch(b);
+  return (
+    <section className="card-a">
+      {Array.from({ length: b.rounds }, (_, r) => (
+        <div key={r} className="mt-round">
+          <h3 className="h3">{roundName(r, b.rounds)}</h3>
+          {b.matches
+            .filter((m) => m.round === r)
+            .map((m) => (
+              <div key={m.id} className={`mt ${upcoming?.id === m.id ? "next" : ""} ${m.winner ? "done" : ""}`}>
+                {m.bye ? (
+                  <>
+                    <TeamTag st={st} id={m.a ?? m.b} win />
+                    <span className="mt-bye">volný postup</span>
+                  </>
+                ) : (
+                  <>
+                    <TeamTag st={st} id={m.a} win={!!m.winner && m.winner === m.a} lose={!!m.winner && m.winner !== m.a} />
+                    <span className="mt-vs">{m.winner ? `${m.scoreA} : ${m.scoreB}` : "vs"}</span>
+                    <TeamTag st={st} id={m.b} win={!!m.winner && m.winner === m.b} lose={!!m.winner && m.winner !== m.b} />
+                  </>
+                )}
+                {upcoming?.id === m.id && <span className="mt-flag">na řadě</span>}
+              </div>
+            ))}
+        </div>
+      ))}
+      {!played && (
+        <button className="btn btn-sm" onClick={() => confirm("Vylosovat pavouka znovu?") && cmd({ type: "drawBracket" })}>
+          <Shuffle className="btn-ic" /> Přelosovat
+        </button>
+      )}
+    </section>
+  );
+}
+
+function DuelStep({ st, match }: { st: AdminState; match: Match }) {
+  const b = st.bracket!;
+  const q = st.questions[st.questionIndex + 1];
+  return (
+    <>
+      <section className="card-a duel-a">
+        <span className="duel-a-round">{roundName(match.round, b.rounds)}</span>
+        <div className="duel-a-row">
+          <TeamTag st={st} id={match.a} />
+          <span className="duel-a-vs">VS</span>
+          <TeamTag st={st} id={match.b} />
+        </div>
+        <p className="mute small center">Na projektoru: představení duelu. Zavolej zástupce obou týmů ke stolu.</p>
+      </section>
+      {q && (
+        <section className="card-a">
+          <h3 className="h3">Další otázka (vidíš jen ty)</h3>
+          <p className="qtext">{q.text}</p>
+          <ol className="answers preview">
+            {q.answers.map((a, i) => (
+              <li key={i} className="ans">
+                <span className="ans-n">{i + 1}</span>
+                <span className="ans-t">{a.text}</span>
+                <span className="ans-p">{a.points * q.multiplier}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
+  );
+}
+
+function QuestionStep({ st, cmd, match, onFlip }: { st: AdminState; cmd: Cmd; match: Match | null; onFlip: (i: number) => void }) {
   const q = st.questions[st.questionIndex];
   const round = st.round;
   if (!q || !round) return null;
-  const winner = st.buzzer.winner ? st.teams.find((t) => t.id === st.buzzer.winner) : undefined;
+  const asking = round.phase === "question";
 
   return (
     <>
+      {match && (
+        <section className="card-a duel-head">
+          {(["a", "b"] as const).map((side) => {
+            const id = match[side];
+            const t = st.teams.find((x) => x.id === id);
+            const n = id ? (round.strikes[id] ?? 0) : 0;
+            const turn = round.turn === id;
+            return (
+              <button
+                key={side}
+                className={`dh-side ${turn ? "turn" : ""} ${n >= MAX_STRIKES ? "out" : ""}`}
+                onClick={() => id && !turn && cmd({ type: "setTurn", teamId: id })}
+              >
+                {turn && <motion.span layoutId="adm-turn" className="dh-turn">na tahu</motion.span>}
+                <span className="t-ic">{t && <TeamIcon name={t.icon} />}</span>
+                <span className="dh-name">{t?.name}</span>
+                <span className="dh-score">{side === "a" ? match.scoreA : match.scoreB}</span>
+                <span className="mini-x">
+                  {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                    <span key={i} className={i < n ? "on" : ""}>
+                      {i < n && <XIcon />}
+                    </span>
+                  ))}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+      )}
+
+      {asking && (
+        <section className="card-a waiting-buzz">
+          <span className="wb-dot" />
+          <div>
+            <b>Čekám na bzučák…</b>
+            <p className="mute small">
+              {match ? "Kdo z dvojice zmáčkne první, je na tahu. Bez telefonu? Klepni nahoře na tým." : "Bzučet můžou všechny týmy."}
+            </p>
+          </div>
+        </section>
+      )}
+
       <section className="card-a qcard">
         <div className="q-head">
           <span className="qnav-num">
@@ -437,14 +632,14 @@ function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (
           {q.multiplier > 1 && <span className="mult">body ×{q.multiplier}</span>}
         </div>
         <p className="qtext">{q.text}</p>
-        <p className="mute small">Klepni na odpověď, kterou někdo uhodl.</p>
+        <p className="mute small">{asking ? "Karty se otočí až po bzučáku." : "Klepni na odpověď, kterou někdo uhodl."}</p>
         <ol className="answers">
           {q.answers.map((a, i) => {
             const rev = round.revealed[i];
             const by = rev?.by ? st.teams.find((t) => t.id === rev.by) : undefined;
             return (
               <li key={i}>
-                <button className={`ans ${rev ? (rev.by ? "done" : "done dim") : ""}`} disabled={!!rev} onClick={() => onFlip(i)}>
+                <button className={`ans ${rev ? (rev.by ? "done" : "done dim") : ""}`} disabled={!!rev || asking} onClick={() => onFlip(i)}>
                   <span className="ans-n">{i + 1}</span>
                   <span className="ans-t">{a.text}</span>
                   {by && (
@@ -461,51 +656,34 @@ function QuestionStep({ st, cmd, onFlip }: { st: AdminState; cmd: Cmd; onFlip: (
         </ol>
       </section>
 
-      <section className="card-a">
-        <h3 className="h3">Pokusy týmů</h3>
-        <div className="strike-list">
-          {st.teams.map((t) => {
-            const n = round.strikes[t.id] ?? 0;
-            return (
-              <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
-                <span className="t-ic">
-                  <TeamIcon name={t.icon} />
-                </span>
-                <span className="strike-name">{t.name}</span>
-                <span className="mini-x">
-                  {Array.from({ length: MAX_STRIKES }, (_, i) => (
-                    <span key={i} className={i < n ? "on" : ""}>
-                      {i < n && <XIcon />}
-                    </span>
-                  ))}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <button className="btn btn-sm" onClick={() => cmd({ type: "clearStrikes" })}>
-          Vynulovat pokusy
-        </button>
-      </section>
-
-      <section className="card-a">
-        <h3 className="h3">Bzučáky na telefonech týmů</h3>
-        <p className="mute small">
-          {st.buzzer.open
-            ? "Otevřeno — kdo zmáčkne první, ukáže se na projektoru."
-            : winner
-              ? `První: ${winner.name}`
-              : "Volitelné — souboj „kdo dřív“."}
-        </p>
-        <div className="row-btns">
-          <button className={`btn btn-sm ${st.buzzer.open ? "btn-y" : ""}`} onClick={() => cmd({ type: "buzzer", action: "open" })}>
-            {st.buzzer.open ? "● Otevřeno" : "Otevřít"}
+      {!match && (
+        <section className="card-a">
+          <h3 className="h3">Pokusy týmů</h3>
+          <div className="strike-list">
+            {st.teams.map((t) => {
+              const n = round.strikes[t.id] ?? 0;
+              return (
+                <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
+                  <span className="t-ic">
+                    <TeamIcon name={t.icon} />
+                  </span>
+                  <span className="strike-name">{t.name}</span>
+                  <span className="mini-x">
+                    {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                      <span key={i} className={i < n ? "on" : ""}>
+                        {i < n && <XIcon />}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <button className="btn btn-sm" onClick={() => cmd({ type: "clearStrikes" })}>
+            Vynulovat pokusy
           </button>
-          <button className="btn btn-sm" onClick={() => cmd({ type: "buzzer", action: "reset" })}>
-            Zavřít / reset
-          </button>
-        </div>
-      </section>
+        </section>
+      )}
     </>
   );
 }
@@ -528,20 +706,6 @@ function Ranking({ teams }: { teams: Team[] }) {
   );
 }
 
-function ScoresStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
-  return (
-    <section className="card-a">
-      <h3 className="h3">Na projektoru: průběžné pořadí</h3>
-      <Ranking teams={st.teams} />
-      {st.round && (
-        <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "board" })}>
-          <ArrowLeft className="btn-ic" /> Zpět na otázku {st.questionIndex + 1}
-        </button>
-      )}
-    </section>
-  );
-}
-
 function EndShowButton({ cmd }: { cmd: Cmd }) {
   return (
     <button
@@ -557,11 +721,13 @@ function EndShowButton({ cmd }: { cmd: Cmd }) {
 }
 
 function FinalStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
-  const winner = [...st.teams].sort((a, b) => b.score - a.score)[0];
+  const champId = champion(st.bracket);
+  const winner = st.teams.find((t) => t.id === champId) ?? [...st.teams].sort((a, b) => b.score - a.score)[0];
   return (
     <section className="card-a center-card">
       <span className="step-ic-wrap">{winner ? <TeamIcon name={winner.icon} /> : <Trophy className="step-ic" />}</span>
       <h2 className="step-title">Vítěz: {winner?.name ?? "—"}</h2>
+      <p className="mute small">Body za celý turnaj:</p>
       <Ranking teams={st.teams} />
       <EndShowButton cmd={cmd} />
     </section>
@@ -575,17 +741,26 @@ function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         <ChevronDown className="adv-chev" /> Pokročilé ovládání
       </summary>
       <h3 className="h3">Projektor ukazuje</h3>
-      <div className="seg seg5">
+      <div className="seg seg6">
         {VIEWS.map(([v, label]) => (
           <button
             key={v}
             className={`seg-btn ${st.view === v ? "on" : ""}`}
             onClick={() => cmd({ type: "setView", view: v })}
-            disabled={v === "board" && !st.round}
+            disabled={(v === "board" && !st.round) || (v === "bracket" && !st.bracket) || (v === "duel" && !st.matchId)}
           >
             {label}
           </button>
         ))}
+      </div>
+      <h3 className="h3">Bzučáky</h3>
+      <div className="row-btns">
+        <button className={`btn btn-sm ${st.buzzer.open ? "btn-y" : ""}`} onClick={() => cmd({ type: "buzzer", action: "open" })}>
+          {st.buzzer.open ? "● Otevřeno" : "Otevřít znovu"}
+        </button>
+        <button className="btn btn-sm" onClick={() => cmd({ type: "buzzer", action: "reset" })}>
+          Zavřít / reset
+        </button>
       </div>
       <h3 className="h3">Skočit na otázku</h3>
       <div className="jump-list">
@@ -593,7 +768,7 @@ function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
           <button
             key={q.id}
             className={`jump ${i === st.questionIndex ? "on" : ""}`}
-            onClick={() => confirm(`Spustit otázku ${i + 1}? Aktuální kolo se zahodí.`) && cmd({ type: "goto", index: i })}
+            onClick={() => confirm(`Spustit otázku ${i + 1}? Aktuální otázka se zahodí.`) && cmd({ type: "goto", index: i })}
           >
             <span className="qedit-n">{i + 1}</span>
             <span className="qedit-t">{q.text}</span>
@@ -607,17 +782,29 @@ function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
 function TeamSheet({
   sheet,
   st,
+  match,
   onClose,
   onPick,
 }: {
   sheet: Sheet;
   st: AdminState;
+  match: Match | null;
   onClose: () => void;
   onPick: (teamId: string | null) => void;
 }) {
   const q = st.questions[st.questionIndex];
   const strikes = st.round?.strikes ?? {};
   const answer = sheet?.kind === "flip" && q ? q.answers[sheet.index] : null;
+  const turn = st.round?.turn ?? null;
+  // v duelu jen dva soupeři, tým na tahu první
+  const teams = match
+    ? [match.a, match.b]
+        .map((id) => st.teams.find((t) => t.id === id))
+        .filter((t): t is Team => !!t)
+        .sort((x, y) => Number(y.id === turn) - Number(x.id === turn))
+    : st.teams;
+  const scoreOf = (id: string) => (match ? (id === match.a ? match.scoreA : match.scoreB) : 0);
+  const leader = match ? (match.scoreA === match.scoreB ? null : match.scoreA > match.scoreB ? match.a : match.b) : null;
 
   return (
     <AnimatePresence>
@@ -637,23 +824,33 @@ function TeamSheet({
                 Kdo uhodl <em>„{answer?.text}“</em>?
                 <span className="mute small"> +{(answer?.points ?? 0) * (q?.multiplier ?? 1)} b.</span>
               </h2>
+            ) : sheet.kind === "endDuel" ? (
+              <h2 className="sheet-title">
+                Kdo <em>vyhrál duel</em> a postupuje?
+                <span className="mute small"> {leader ? `Vede ${st.teams.find((t) => t.id === leader)?.name}.` : "Je to nerozhodně."}</span>
+              </h2>
             ) : (
               <h2 className="sheet-title">
                 Kdo se <em>netrefil</em>?
               </h2>
             )}
-            <div className="team-grid">
-              {st.teams.map((t: Team) => {
+            <div className={`team-grid ${match ? "duo" : ""}`}>
+              {teams.map((t: Team) => {
                 const n = strikes[t.id] ?? 0;
-                const out = n >= MAX_STRIKES;
+                const out = sheet.kind === "strike" && n >= MAX_STRIKES;
+                const primary = sheet.kind === "endDuel" ? t.id === leader : t.id === turn;
                 return (
-                  <button key={t.id} className="team-btn" disabled={out} onClick={() => onPick(t.id)}>
+                  <button key={t.id} className={`team-btn ${primary ? "primary" : ""}`} disabled={out} onClick={() => onPick(t.id)}>
                     <span className="team-btn-em">
                       <TeamIcon name={t.icon} />
                     </span>
                     <span className="team-btn-name">{t.name}</span>
                     <span className="team-btn-meta">
-                      {t.score} b. · {out ? "vyřazen" : n ? `${n}× vedle` : "bez chyby"}
+                      {sheet.kind === "endDuel"
+                        ? `${scoreOf(t.id)} bodů v duelu`
+                        : match
+                          ? `${t.id === turn ? "na tahu · " : ""}${out ? "vyřazen" : n ? `${n}× vedle` : "bez chyby"}`
+                          : `${t.score} b. · ${out ? "vyřazen" : n ? `${n}× vedle` : "bez chyby"}`}
                     </span>
                   </button>
                 );

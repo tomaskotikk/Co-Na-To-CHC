@@ -15,6 +15,12 @@ const LOAD_TIMEOUT_MS = 8000;
 
 export type Stored = { state: unknown; questions: unknown };
 
+/** data z dotazníku (repo CHC-Dotaznik ukládá do stejného Firebase projektu) */
+export type SurveyData = {
+  questions: { id: string; text: string }[];
+  responses: { answers: Record<string, string | null> }[];
+};
+
 type Loaded = { data: unknown; time: number };
 
 export type Storage = {
@@ -22,6 +28,8 @@ export type Storage = {
   load(): Promise<Stored>;
   saveState(state: object): void;
   saveQuestions(questions: object[]): void;
+  /** jen s Firebase */
+  readSurvey?(): Promise<SurveyData>;
 };
 
 function readLocal(file: string): Loaded | null {
@@ -132,6 +140,16 @@ export function createStorage(): Storage {
       writeLocal(QUESTIONS_FILE, q, "otázek");
       // Firestore nebere pole jako kořen dokumentu
       writeQuestions({ list: q });
+    },
+    async readSurvey() {
+      const [qs, rs] = await withTimeout(
+        Promise.all([db.collection("survey").doc("questions").get(), db.collection("survey_responses").get()]),
+        LOAD_TIMEOUT_MS,
+      );
+      return {
+        questions: (qs.data()?.list ?? []) as SurveyData["questions"],
+        responses: rs.docs.map((d) => ({ answers: (d.data().answers ?? {}) as Record<string, string | null> })),
+      };
     },
   };
 }
