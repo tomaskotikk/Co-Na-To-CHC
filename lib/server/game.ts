@@ -208,6 +208,11 @@ export class Game {
     // i při startu, ať má Firebase vždy aktuální kopii
     this.writeQuestions();
     this.save();
+    // stav bzučáku se neukládá — po restartu ve fázi „otázka“ ho znovu otevřít
+    if (this.s.round?.phase === "question") {
+      const m = this.currentMatch();
+      this.buzzer = { open: true, winner: null, teams: m?.a && m.b ? [m.a, m.b] : null };
+    }
     io.on("connection", (socket) => this.onConnection(socket));
   }
 
@@ -310,6 +315,8 @@ export class Game {
       if (String(p?.code ?? "").trim() !== this.s.joinCode) return ack?.({ ok: false, error: "Špatný kód hry." });
       if (name.length < 2) return ack?.({ ok: false, error: "Název týmu je moc krátký." });
       if (this.s.teams.length >= MAX_TEAMS) return ack?.({ ok: false, error: "Hra je plná." });
+      // nový tým by v pavoukovi neměl místo
+      if (this.s.bracket) return ack?.({ ok: false, error: "Turnaj už běží — připojit se šlo jen před losováním." });
       if (this.s.teams.some((t) => t.name.toLowerCase() === name.toLowerCase()))
         return ack?.({ ok: false, error: "Tým s tímhle jménem už existuje." });
       const team = this.createTeam(name);
@@ -461,8 +468,12 @@ export class Game {
         const q = this.currentQuestion();
         if (!q || !this.s.round) return "Není vybraná otázka.";
         if (!q.answers[cmd.index]) return "Karta neexistuje.";
+        if (this.s.round.phase === "question") return "Nejdřív musí někdo zabzučet (nebo klepni nahoře na tým, který je na tahu).";
         if (this.s.round.revealed[cmd.index]) return "Karta už je otočená.";
         const team = cmd.teamId ? this.s.teams.find((t) => t.id === cmd.teamId) : null;
+        if (cmd.teamId && !team) return "Tým neexistuje.";
+        const duel = this.currentMatch();
+        if (team && duel && team.id !== duel.a && team.id !== duel.b) return "Tým v tomhle duelu nehraje.";
         const label = `Otočit #${cmd.index + 1}${team ? ` → ${team.name}` : " (bez bodů)"}`;
         this.schedule(label, () => {
           const round = this.s.round;
@@ -485,6 +496,9 @@ export class Game {
       case "strike": {
         const team = this.s.teams.find((t) => t.id === cmd.teamId);
         if (!team || !this.s.round) return "Tým nebo otázka neexistuje.";
+        const inDuel = this.currentMatch();
+        if (inDuel && team.id !== inDuel.a && team.id !== inDuel.b) return "Tým v tomhle duelu nehraje.";
+        if (this.s.round.phase === "question") return "Nejdřív musí někdo zabzučet (nebo klepni nahoře na tým, který je na tahu).";
         if ((this.s.round.strikes[team.id] ?? 0) >= MAX_STRIKES) return "Tým už má 3 pokusy pryč.";
         this.schedule(`BZZZ → ${team.name}`, () => {
           const round = this.s.round;
@@ -555,8 +569,19 @@ export class Game {
       case "buzzer": {
         const m = this.currentMatch();
         const teams = m?.a && m.b ? [m.a, m.b] : null;
-        if (cmd.action === "open") this.buzzer = { open: true, winner: null, teams };
-        else if (cmd.action === "close") this.buzzer = { ...this.buzzer, open: false };
+        if (cmd.action === "open") {
+          const round = this.s.round;
+          if (!round) return "Bzučák jde otevřít jen u otázky.";
+          if (round.revealed.some(Boolean)) return "Karty už se otáčí — bzučet se dá jen před první odpovědí.";
+          // znovu od začátku: kdo bzučí, ten je na tahu
+          this.apply(() => {
+            round.phase = "question";
+            round.turn = null;
+            this.buzzer = { open: true, winner: null, teams };
+          });
+          return null;
+        }
+        if (cmd.action === "close") this.buzzer = { ...this.buzzer, open: false };
         else this.buzzer = closedBuzzer();
         this.changed();
         return null;
@@ -572,6 +597,7 @@ export class Game {
         const name = cmd.name.replace(/\s+/g, " ").trim().slice(0, 20);
         if (name.length < 2) return "Název je moc krátký.";
         if (this.s.teams.length >= MAX_TEAMS) return "Maximum týmů.";
+        if (this.s.bracket) return "Pavouk už je vylosovaný — nový tým by v něm neměl místo (Nová hra = začít znovu).";
         if (this.s.teams.some((t) => t.name.toLowerCase() === name.toLowerCase())) return "Tento název už existuje.";
         this.apply(() => {
           const t = this.createTeam(name);
@@ -589,6 +615,9 @@ export class Game {
         return null;
       }
       case "teamRemove": {
+        // tým v pavoukovi by po sobě nechal díru v historii duelů
+        if (this.s.bracket && this.s.bracket.matches.some((m) => m.a === cmd.id || m.b === cmd.id))
+          return "Tým už je v pavoukovi — když odešel, dej v jeho duelu Konec duelu a vítězem soupeře. (Nová hra = začít znovu.)";
         this.apply(() => {
           this.s.teams = this.s.teams.filter((t) => t.id !== cmd.id);
           if (this.s.round) delete this.s.round.strikes[cmd.id];
@@ -891,6 +920,13 @@ export class Game {
       this.io.to("screens").to("teams").emit("state", pub);
       this.io.to("admins").emit("admin:state", this.adminState());
     });
+  }
+
+  /** při vypínání: uložit hned (debounce by poslední akci zahodil) */
+  async flush() {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    await this.storage.flushState(this.s);
   }
 
   private save() {

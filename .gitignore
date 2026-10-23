@@ -10,4 +10,4 @@ firebase-key.json
 # hesla — NIKDY necommitovat
 .env*
 # otázky z dotazníku (jména učitelů) — repo je veřejné, drží se jen ve Firebase a lokálně
-data/questions.json
+data/questions*.json

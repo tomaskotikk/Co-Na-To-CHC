@@ -23,6 +23,17 @@ app.prepare().then(async () => {
   const storage = createStorage();
   const game = new Game(io, port, storage, await storage.load());
 
+  // Ctrl+C / zavření okna / restart na Renderu: dopsat poslední stav, než proces skončí
+  let closing = false;
+  const shutdown = async () => {
+    if (closing) return;
+    closing = true;
+    await game.flush().catch((e) => console.error("Uložení při vypínání selhalo", e));
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
   httpServer.listen(port, "0.0.0.0", () => {
     const line = "─".repeat(52);
     console.log(`\n${line}\n  CO NA TO CHC  ·  ${dev ? "vývojový režim" : "produkce"}\n${line}`);

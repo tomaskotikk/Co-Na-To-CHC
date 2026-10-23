@@ -27,6 +27,8 @@ export type Storage = {
   readonly label: string;
   load(): Promise<Stored>;
   saveState(state: object): void;
+  /** při vypínání serveru: zapsat hned a počkat (jinak by se ztratila poslední akce) */
+  flushState(state: object): Promise<void>;
   saveQuestions(questions: object[]): void;
   /** jen s Firebase */
   readSurvey?(): Promise<SurveyData>;
@@ -100,6 +102,9 @@ export function createStorage(): Storage {
       },
       saveState: (s) => writeLocal(STATE_FILE, s, "stavu"),
       saveQuestions: (q) => writeLocal(QUESTIONS_FILE, q, "otázek"),
+      async flushState(s) {
+        fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
+      },
     };
   }
 
@@ -135,6 +140,10 @@ export function createStorage(): Storage {
     saveState(s) {
       writeLocal(STATE_FILE, s, "stavu");
       writeState(s);
+    },
+    async flushState(s) {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
+      await withTimeout(stateRef.set(JSON.parse(JSON.stringify(s))), 3000).catch(() => {});
     },
     saveQuestions(q) {
       writeLocal(QUESTIONS_FILE, q, "otázek");
