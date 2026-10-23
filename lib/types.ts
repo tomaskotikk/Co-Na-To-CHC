@@ -8,7 +8,12 @@ export type Question = {
   answers: Answer[];
   /** násobič bodů (např. finálová otázka za dvojnásob) */
   multiplier: number;
+  /** chc = z našeho dotazníku, cesi = záložní z Co na to Češi */
+  source: QuestionSource;
 };
+
+export type QuestionSource = "chc" | "cesi";
+export const SOURCE_LABEL: Record<QuestionSource, string> = { chc: "CHC", cesi: "Co na to Češi" };
 
 export const TEAM_ICONS = [
   "rocket",
@@ -133,6 +138,8 @@ export type PublicState = {
   question: PublicQuestion | null;
   round: Round | null;
   bracket: Bracket | null;
+  /** id už zahraných otázek — nejdou pustit znovu */
+  used: string[];
   /** právě hraný (nebo ohlášený) duel */
   matchId: string | null;
   buzzer: Buzzer;
@@ -175,7 +182,7 @@ export type AdminCmd =
   | { type: "endShow" }
   | { type: "drawBracket" }
   | { type: "startDuel"; matchId?: string }
-  | { type: "showQuestion" }
+  | { type: "showQuestion"; questionId?: string }
   | { type: "setTurn"; teamId: string }
   | { type: "endDuel"; winnerId: string }
   | { type: "importSurvey" };

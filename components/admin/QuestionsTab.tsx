@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Play, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AdminCmd, AdminState, Question } from "@/lib/types";
+import { SOURCE_LABEL, type AdminCmd, type AdminState, type Question, type QuestionSource } from "@/lib/types";
 
 type Cmd = (c: AdminCmd) => Promise<boolean>;
 
@@ -11,6 +11,7 @@ const blank = (): Question => ({
   id: newId(),
   text: "",
   multiplier: 1,
+  source: "chc",
   answers: Array.from({ length: 6 }, () => ({ text: "", points: 0 })),
 });
 
@@ -20,6 +21,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
   const [open, setOpen] = useState<string | null>(null);
   const [json, setJson] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [filter, setFilter] = useState<QuestionSource | "all">("all");
   const lastServer = useRef(st.questions);
 
   // změny ze serveru převzít, pokud zrovna nic needituju
@@ -49,14 +51,14 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
         <h3 className="h3">Otázky z dotazníku</h3>
         <p className="mute small">
           Spočítá odpovědi z dotazníku: u každé otázky 6 nejčastějších, body = jejich podíl hlasů (dohromady 100). Pořadí otázek se zamíchá. Odpovědi pak můžeš níž ručně učesat (sloučit „Kouří“ a „Jde kouřit“).
-          Nahradí současné otázky ({st.questions.length}).
+          Nahradí otázky CHC ({st.questions.filter((q) => q.source === "chc").length}), otázky z Co na to Češi zůstanou.
         </p>
         <button
           className="btn btn-y btn-block"
           disabled={importing}
           onClick={async () => {
             if (dirty && !confirm("Máš neuložené změny — zahodit je?")) return;
-            if (!confirm("Načíst otázky z dotazníku? Současné otázky se nahradí.")) return;
+            if (!confirm("Načíst otázky z dotazníku? Současné otázky CHC se nahradí.")) return;
             setImporting(true);
             if (await cmd({ type: "importSurvey" })) setDirty(false);
             setImporting(false);
@@ -75,6 +77,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
             className="btn btn-y"
             onClick={() => {
               const q = blank();
+              if (filter === "cesi") q.source = "cesi";
               update((d) => d.push(q));
               setOpen(q.id);
             }}
@@ -108,8 +111,18 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
         )}
       </section>
 
+      <div className="seg qfilter">
+        {(["all", "chc", "cesi"] as const).map((f) => (
+          <button key={f} className={`seg-btn ${filter === f ? "on" : ""}`} onClick={() => setFilter(f)}>
+            {f === "all" ? "Vše" : SOURCE_LABEL[f]} · {f === "all" ? draft.length : draft.filter((q) => q.source === f).length}
+          </button>
+        ))}
+      </div>
+
       {draft.map((q, qi) => {
+        if (filter !== "all" && q.source !== filter) return null;
         const isOpen = open === q.id;
+        const used = st.used.includes(q.id);
         const live = st.round?.questionId === q.id;
         return (
           <section className={`card-a qedit ${isOpen ? "open" : ""}`} key={q.id}>
@@ -117,6 +130,8 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
               <span className="qedit-n">{qi + 1}</span>
               <span className="qedit-t">{q.text || <i className="mute">Bez textu</i>}</span>
               {live && <span className="tag live">●</span>}
+              {used && !live && <span className="tag">zahraná</span>}
+              <span className={`src-tag ${q.source}`}>{q.source === "chc" ? "CHC" : "ČEŠI"}</span>
               {q.multiplier > 1 && <span className="mult">×{q.multiplier}</span>}
               <span className="chev">{isOpen ? <ChevronUp className="btn-ic" /> : <ChevronDown className="btn-ic" />}</span>
             </button>
@@ -130,6 +145,14 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
                   placeholder="Text otázky…"
                   onChange={(e) => update((d) => (d[qi].text = e.target.value))}
                 />
+                <div className="mult-row">
+                  <span className="mute small">Zdroj</span>
+                  {(["chc", "cesi"] as const).map((x) => (
+                    <button key={x} className={`seg-btn ${q.source === x ? "on" : ""}`} onClick={() => update((d) => (d[qi].source = x))}>
+                      {SOURCE_LABEL[x]}
+                    </button>
+                  ))}
+                </div>
                 <div className="mult-row">
                   <span className="mute small">Body ×</span>
                   {[1, 2, 3].map((m) => (

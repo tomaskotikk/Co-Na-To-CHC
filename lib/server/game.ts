@@ -34,10 +34,11 @@ type Persisted = {
   round: Round | null;
   bracket: Bracket | null;
   matchId: string | null;
+  used: string[];
   settings: Settings;
 };
 
-type Snapshot = Pick<Persisted, "teams" | "view" | "questionIndex" | "round" | "bracket" | "matchId"> & { buzzer: Buzzer };
+type Snapshot = Pick<Persisted, "teams" | "view" | "questionIndex" | "round" | "bracket" | "matchId" | "used"> & { buzzer: Buzzer };
 
 type FxInput = { [K in Fx["kind"]]: Omit<Extract<Fx, { kind: K }>, "id"> }[Fx["kind"]];
 
@@ -99,6 +100,7 @@ function defaultQuestions(): Question[] {
       id: id(),
       text: "Který z učitelů by nejlépe sbalil holku / kluka na diskotéce?",
       multiplier: 1,
+      source: "chc",
       answers: [
         { text: "Učitel č. 1", points: 31 },
         { text: "Učitel č. 2", points: 24 },
@@ -112,6 +114,7 @@ function defaultQuestions(): Question[] {
       id: id(),
       text: "Co nejčastěji děláš o přestávce?",
       multiplier: 1,
+      source: "chc",
       answers: [
         { text: "Mobil", points: 38 },
         { text: "Svačina", points: 22 },
@@ -125,6 +128,7 @@ function defaultQuestions(): Question[] {
       id: id(),
       text: "Bez čeho by ses neobešel/neobešla u maturity?",
       multiplier: 2,
+      source: "chc",
       answers: [
         { text: "Tahák", points: 35 },
         { text: "Káva", points: 21 },
@@ -146,6 +150,7 @@ function sanitizeQuestions(input: unknown): Question[] {
         id: typeof q?.id === "string" && q.id ? q.id : id(),
         text: String(q?.text ?? "").slice(0, 240),
         multiplier: [1, 2, 3].includes(Number(q?.multiplier)) ? Number(q.multiplier) : 1,
+        source: q?.source === "cesi" ? "cesi" : "chc",
         answers: answers
           .slice(0, 8)
           .map((a: { text?: unknown; points?: unknown }) => ({
@@ -196,6 +201,7 @@ export class Game {
       round: saved?.round ? { ...({ matchId: null, phase: "play", turn: null } as const), ...(saved.round as Partial<Round>) } as Round : null,
       bracket: saved?.bracket ?? null,
       matchId: saved?.matchId ?? null,
+      used: Array.isArray(saved?.used) ? saved.used : [],
       settings: {
         delayMs: 2500,
         baseUrl: "",
@@ -205,8 +211,8 @@ export class Game {
     };
     const qs = stored.questions;
     this.questions = qs ? sanitizeQuestions(qs) : defaultQuestions();
-    // i při startu, ať má Firebase vždy aktuální kopii
-    this.writeQuestions();
+    // zapsat jen výchozí otázky — jinak by start se starou lokální kopií mohl přepsat novější otázky ve Firebase
+    if (!qs) this.writeQuestions();
     this.save();
     // stav bzučáku se neukládá — po restartu ve fázi „otázka“ ho znovu otevřít
     if (this.s.round?.phase === "question") {
@@ -396,9 +402,15 @@ export class Game {
         // asynchronní — řeší handler admin:cmd
         return null;
       case "showQuestion": {
-        const index = this.s.questionIndex + 1;
-        if (!this.questions[index]) return "Došly otázky — načti je z dotazníku nebo přidej v záložce Otázky.";
-        return this.openQuestion(index);
+        // vybraná ručně, jinak první nezahraná (přednost mají otázky CHC)
+        const fresh = this.questions.filter((q) => !this.s.used.includes(q.id));
+        const q = cmd.questionId
+          ? this.questions.find((x) => x.id === cmd.questionId)
+          : (fresh.find((x) => x.source === "chc") ?? fresh[0]);
+        if (cmd.questionId && !q) return "Otázka neexistuje.";
+        if (!q) return "Došly otázky — přidej je v záložce Otázky (nebo Nová hra je vrátí).";
+        if (this.s.used.includes(q.id)) return "Tahle otázka už se hrála.";
+        return this.openQuestion(this.questions.indexOf(q));
       }
       case "drawBracket": {
         if (this.s.teams.length < 2) return "Na pavouka jsou potřeba aspoň 2 týmy.";
@@ -549,6 +561,7 @@ export class Game {
         this.s.round = snap.round;
         this.s.bracket = snap.bracket;
         this.s.matchId = snap.matchId;
+        this.s.used = snap.used;
         this.buzzer = snap.buzzer;
         this.emitFx({ kind: "undo" });
         this.changed();
@@ -675,6 +688,7 @@ export class Game {
         this.s.round = null;
         this.s.bracket = null;
         this.s.matchId = null;
+        this.s.used = [];
         this.s.joinCode = code4();
         this.buzzer = closedBuzzer();
         this.undoStack = [];
@@ -696,6 +710,7 @@ export class Game {
         this.s.round = null;
         this.s.bracket = null;
         this.s.matchId = null;
+        this.s.used = [];
         this.s.joinCode = code4();
         this.buzzer = closedBuzzer();
         this.undoStack = [];
@@ -727,6 +742,7 @@ export class Game {
     this.flushPending();
     this.apply(() => {
       this.s.questionIndex = index;
+      if (!this.s.used.includes(q.id)) this.s.used.push(q.id);
       this.s.round = this.newRound(q);
       this.s.view = "board";
       this.buzzer = { open: true, winner: null, teams: m?.a && m.b ? [m.a, m.b] : null };
@@ -797,7 +813,8 @@ export class Game {
     const qs = buildFromSurvey(data.questions, data.responses, () => id());
     if (!qs.length) return "V dotazníku zatím nejsou odpovědi.";
     this.cancelPendingSilently();
-    this.questions = shuffle(qs);
+    // otázky z Co na to Češi zůstávají, nahradí se jen ty z dotazníku
+    this.questions = [...shuffle(qs), ...this.questions.filter((q) => q.source === "cesi")];
     this.writeQuestions();
     this.s.questionIndex = -1;
     this.s.round = null;
@@ -843,6 +860,7 @@ export class Game {
         round: this.s.round,
         bracket: this.s.bracket,
         matchId: this.s.matchId,
+        used: this.s.used,
         buzzer: this.buzzer,
       }),
     );
@@ -870,7 +888,8 @@ export class Game {
       question:
         q && round
           ? {
-              number: this.questions.indexOf(q) + 1,
+              // pořadí, ve kterém se otázka hraje (otázky se vybírají ručně)
+              number: this.s.used.indexOf(q.id) + 1 || this.s.used.length + 1,
               text: q.text,
               slots: q.answers.length,
               multiplier: q.multiplier,
@@ -879,6 +898,7 @@ export class Game {
           : null,
       round,
       bracket: this.s.bracket,
+      used: this.s.used,
       matchId: this.s.matchId,
       buzzer: this.buzzer,
       fx: this.fx,

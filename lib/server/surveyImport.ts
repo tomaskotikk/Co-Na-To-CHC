@@ -42,6 +42,7 @@ export function buildFromSurvey(questions: SurveyData["questions"], responses: S
       id: makeId(),
       text: q.text,
       multiplier: 1,
+      source: "chc",
       answers: top.map((g) => ({
         // nejčastější zápis
         text: capitalize([...g.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0]).slice(0, 60),

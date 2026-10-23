@@ -119,9 +119,13 @@ export function createStorage(): Storage {
     return snap.exists ? { data: snap.data(), time: snap.updateTime!.toMillis() } : null;
   };
 
-  /** novější z Firebase a lokálního souboru (např. když show běžela offline) */
-  const newer = (remote: Loaded | null, local: Loaded | null) =>
-    (remote && local ? (remote.time >= local.time ? remote : local) : (remote ?? local))?.data ?? null;
+  /** stav: novější podle času uloženého v datech (savedAt) — datum souboru lže (cache buildu na Renderu, kopírování)
+   *  lokální bere jen tehdy, když show běžela offline a lokální záznam je opravdu novější */
+  const newerState = (remote: Loaded | null, local: Loaded | null) => {
+    const at = (l: Loaded | null) => Number((l?.data as { savedAt?: unknown } | undefined)?.savedAt) || 0;
+    if (remote && local) return (at(local) > at(remote) ? local : remote).data;
+    return (remote ?? local)?.data ?? null;
+  };
 
   return {
     label: `Firebase (${key.project_id}) + záloha v data/`,
@@ -131,19 +135,22 @@ export function createStorage(): Storage {
       try {
         const [state, questions] = await withTimeout(Promise.all([readRemote(stateRef), readRemote(questionsRef)]), LOAD_TIMEOUT_MS);
         const q = questions && { ...questions, data: (questions.data as { list?: unknown }).list ?? null };
-        return { state: newer(state, localState), questions: newer(q, localQuestions) };
+        // otázky: Firebase je hlavní zdroj, lokální soubor jen když tam nic není
+        return { state: newerState(state, localState), questions: q?.data ?? localQuestions?.data ?? null };
       } catch (e) {
         console.error("Firebase: načtení selhalo, jedu z data/:", (e as Error).message);
         return { state: localState?.data ?? null, questions: localQuestions?.data ?? null };
       }
     },
     saveState(s) {
-      writeLocal(STATE_FILE, s, "stavu");
-      writeState(s);
+      const data = { ...s, savedAt: Date.now() };
+      writeLocal(STATE_FILE, data, "stavu");
+      writeState(data);
     },
     async flushState(s) {
-      fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2));
-      await withTimeout(stateRef.set(JSON.parse(JSON.stringify(s))), 3000).catch(() => {});
+      const data = { ...s, savedAt: Date.now() };
+      fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+      await withTimeout(stateRef.set(JSON.parse(JSON.stringify(data))), 3000).catch(() => {});
     },
     saveQuestions(q) {
       writeLocal(QUESTIONS_FILE, q, "otázek");

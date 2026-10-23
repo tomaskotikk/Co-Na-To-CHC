@@ -1358,3 +1358,76 @@ kbd {
   background: #1e1a05;
   box-shadow: 0 0 18px rgba(255, 213, 0, 0.25);
 }
+
+/* ═════════ VÝBĚR OTÁZKY ═════════ */
+
+.src-tag {
+  flex: none;
+  padding: 3px 7px 2px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.src-tag.chc {
+  background: var(--y);
+  color: var(--ink);
+}
+.src-tag.cesi {
+  background: #2a2a2a;
+  color: var(--white);
+  border: 1px solid #444;
+}
+.jump.used {
+  opacity: 0.4;
+}
+.qfilter,
+.qpick-tabs {
+  grid-template-columns: repeat(3, 1fr);
+}
+.qpick-tabs {
+  grid-template-columns: 1fr 1fr;
+  font-size: 13px;
+}
+.qpick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 52dvh;
+}
+.qpick-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--ink);
+  border: 2px solid #2c2c2c;
+  transition: border-color 0.2s;
+}
+.qpick-item.on {
+  border-color: var(--y);
+}
+.qpick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+.qpick-text {
+  flex: 1;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.qpick-chev {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--mute);
+  transition: transform 0.2s;
+}
+.qpick-item.on .qpick-chev {
+  transform: rotate(180deg);
+  color: var(--y);
+}

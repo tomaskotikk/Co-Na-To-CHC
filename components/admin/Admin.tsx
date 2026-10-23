@@ -35,6 +35,8 @@ import {
   type AdminCmd,
   type AdminState,
   type Match,
+  type QuestionSource,
+  SOURCE_LABEL,
   type Team,
   type View,
 } from "@/lib/types";
@@ -247,7 +249,9 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
   const upcoming = nextMatch(b);
   const champ = champion(b);
   const name = (id: string | null) => st.teams.find((t) => t.id === id)?.name ?? "?";
-  const nextQ = st.questions[st.questionIndex + 1];
+  const fresh = st.questions.filter((q) => !st.used.includes(q.id));
+  const nextQ = fresh.length > 0;
+  const [picking, setPicking] = useState(false);
   const unrevealed = st.round?.revealed.some((r) => !r) ?? false;
   const played = b?.matches.some((m) => !m.bye && m.winner) ?? false;
 
@@ -281,8 +285,8 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
       primary = {
         icon: Megaphone,
         label: "Ukázat otázku",
-        sub: nextQ ? `Otázka ${st.questionIndex + 2} z ${st.questions.length}` : "Došly otázky!",
-        run: () => cmd({ type: "showQuestion" }),
+        sub: nextQ ? `vybereš ze ${fresh.length} nezahraných` : "Došly otázky!",
+        run: () => setPicking(true),
         disabled: !nextQ,
       };
       break;
@@ -347,7 +351,7 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
             </>
           ) : match ? (
             <>
-              <button className="btn act-next wide" onClick={() => cmd({ type: "showQuestion" })} disabled={!nextQ}>
+              <button className="btn act-next wide" onClick={() => setPicking(true)} disabled={!nextQ}>
                 <Megaphone className="act-ic" />
                 <small>Další otázka</small>
               </button>
@@ -357,7 +361,7 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
               </button>
             </>
           ) : (
-            <button className="btn act-next wide" onClick={() => cmd({ type: "showQuestion" })} disabled={!nextQ}>
+            <button className="btn act-next wide" onClick={() => setPicking(true)} disabled={!nextQ}>
               <Megaphone className="act-ic" />
               <small>Další otázka</small>
             </button>
@@ -380,6 +384,15 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
           </div>
         )
       )}
+
+      <QuestionPicker
+        st={st}
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={async (questionId) => {
+          if (await cmd({ type: "showQuestion", questionId })) setPicking(false);
+        }}
+      />
 
       <TeamSheet
         sheet={sheet}
@@ -542,7 +555,6 @@ function BracketStep({ st, cmd, played }: { st: AdminState; cmd: Cmd; played: bo
 
 function DuelStep({ st, match }: { st: AdminState; match: Match }) {
   const b = st.bracket!;
-  const q = st.questions[st.questionIndex + 1];
   return (
     <>
       <section className="card-a duel-a">
@@ -552,23 +564,10 @@ function DuelStep({ st, match }: { st: AdminState; match: Match }) {
           <span className="duel-a-vs">VS</span>
           <TeamTag st={st} id={match.b} />
         </div>
-        <p className="mute small center">Na projektoru: představení duelu. Zavolej zástupce obou týmů ke stolu.</p>
+        <p className="mute small center">
+          Na projektoru: představení duelu. Zavolej zástupce ke stolu a pak vyber otázku (Ukázat otázku).
+        </p>
       </section>
-      {q && (
-        <section className="card-a">
-          <h3 className="h3">Další otázka (vidíš jen ty)</h3>
-          <p className="qtext">{q.text}</p>
-          <ol className="answers preview">
-            {q.answers.map((a, i) => (
-              <li key={i} className="ans">
-                <span className="ans-n">{i + 1}</span>
-                <span className="ans-t">{a.text}</span>
-                <span className="ans-p">{a.points * q.multiplier}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
     </>
   );
 }
@@ -767,15 +766,104 @@ function Advanced({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         {st.questions.map((q, i) => (
           <button
             key={q.id}
-            className={`jump ${i === st.questionIndex ? "on" : ""}`}
+            className={`jump ${i === st.questionIndex ? "on" : ""} ${st.used.includes(q.id) ? "used" : ""}`}
             onClick={() => confirm(`Spustit otázku ${i + 1}? Aktuální otázka se zahodí.`) && cmd({ type: "goto", index: i })}
           >
             <span className="qedit-n">{i + 1}</span>
             <span className="qedit-t">{q.text}</span>
+            <span className={`src-tag ${q.source}`}>{q.source === "chc" ? "CHC" : "ČEŠI"}</span>
           </button>
         ))}
       </div>
     </details>
+  );
+}
+
+/** ruční výběr otázky — zahrané se nenabízí, filtr CHC / Co na to Češi */
+function QuestionPicker({
+  st,
+  open,
+  onClose,
+  onPick,
+}: {
+  st: AdminState;
+  open: boolean;
+  onClose: () => void;
+  onPick: (questionId: string) => void;
+}) {
+  const [src, setSrc] = useState<QuestionSource>("chc");
+  const [sel, setSel] = useState<string | null>(null);
+  const fresh = st.questions.filter((q) => !st.used.includes(q.id));
+  const count = (x: QuestionSource) => fresh.filter((q) => q.source === x).length;
+  const list = fresh.filter((q) => q.source === src);
+  useEffect(() => {
+    if (open) setSel(null);
+  }, [open]);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div className="sheet-bg" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+          <motion.div
+            className="sheet qpick"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", stiffness: 420, damping: 38 }}
+          >
+            <div className="sheet-grip" />
+            <h2 className="sheet-title">
+              Vyber <em>otázku</em>
+              <span className="mute small"> · zahraných {st.used.length}</span>
+            </h2>
+            <div className="seg qpick-tabs">
+              {(["chc", "cesi"] as const).map((x) => (
+                <button key={x} className={`seg-btn ${src === x ? "on" : ""}`} onClick={() => setSrc(x)}>
+                  {SOURCE_LABEL[x]} · {count(x)}
+                </button>
+              ))}
+            </div>
+            <div className="qpick-list">
+              {list.length === 0 && <p className="mute small center">Tady už žádná nezahraná otázka není.</p>}
+              {list.map((q) => (
+                <div key={q.id} className={`qpick-item ${sel === q.id ? "on" : ""}`}>
+                  <button className="qpick-head" onClick={() => setSel(sel === q.id ? null : q.id)}>
+                    <span className="qpick-text">{q.text}</span>
+                    {q.multiplier > 1 && <span className="mult">×{q.multiplier}</span>}
+                    <ChevronDown className="qpick-chev" />
+                  </button>
+                  {sel === q.id && (
+                    <>
+                      <ol className="answers preview">
+                        {q.answers.map((a, i) => (
+                          <li key={i} className="ans">
+                            <span className="ans-n">{i + 1}</span>
+                            <span className="ans-t">{a.text}</span>
+                            <span className="ans-p">{a.points * q.multiplier}</span>
+                          </li>
+                        ))}
+                      </ol>
+                      <button className="btn btn-y btn-block" onClick={() => onPick(q.id)}>
+                        <Megaphone className="btn-ic" /> Ukázat tuhle otázku
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="row-btns">
+              <button className="btn btn-ghost" onClick={onClose}>
+                Zrušit
+              </button>
+              <button className="btn" disabled={!list.length} onClick={() => onPick(list[Math.floor(Math.random() * list.length)].id)}>
+                <Shuffle className="btn-ic" /> Náhodná ({SOURCE_LABEL[src]})
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
