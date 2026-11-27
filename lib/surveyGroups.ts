@@ -61,10 +61,26 @@ export function groupAnswers(answers: string[], groups?: QuestionGroups | null):
     .sort((a, b) => b.count - a.count);
 }
 
-/** body pro hru: podíl hlasů mezi vybranými, dohromady přesně 100 */
+/** jak moc se srovnají rozdíly (1 = čistý podíl hlasů, menší = vyrovnanější karty) */
+const FLATTEN = 0.5;
+/** nejčastější odpověď nesmí mít víc bodů — jinak by jedna karta rozhodla celou otázku */
+const MAX_TOP = 35;
+
+/** body pro hru: pořadí podle hlasů, ale vyrovnané (Pivo 137 vs. Město 5 nedá 91 : 4), dohromady přesně 100 */
 export function toPoints(counts: number[]): number[] {
-  const total = counts.reduce((n, c) => n + c, 0) || 1;
-  const raw = counts.map((c) => (c * 100) / total);
+  let w = counts.map((c) => Math.max(c, 0) ** FLATTEN);
+  const sum = w.reduce((n, x) => n + x, 0) || 1;
+  w = w.map((x) => x / sum);
+  const top = Math.max(...w);
+  if (top > MAX_TOP / 100 && w.length > 1) {
+    // srazit vítěze na strop a zbytek rozdělit mezi ostatní ve stejném poměru
+    const restSum = 1 - top;
+    const i = w.indexOf(top);
+    const capped = w.map((x, j) => (j === i ? MAX_TOP / 100 : restSum ? (x / restSum) * (1 - MAX_TOP / 100) : 0));
+    // jen když tím vítěz zůstane první (při vyrovnaném souboji by se pořadí prohodilo)
+    if (capped.every((x, j) => j === i || x <= MAX_TOP / 100)) w = capped;
+  }
+  const raw = w.map((x) => x * 100);
   const pts = raw.map(Math.floor);
   const order = raw.map((v, i) => [v - Math.floor(v), i] as const).sort((a, b) => b[0] - a[0]);
   const rest = 100 - pts.reduce((n, p) => n + p, 0);
