@@ -11,13 +11,14 @@ import { RULES, type RuleIcon } from "@/lib/rules";
 import { getSocket, resolveBaseUrl, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
 import { audioReady, isMuted, measure, play, setMuted, soundCheck, startSuspense, unlockAudio } from "@/lib/sound";
 import { BracketView, DuelView, podiumOrder } from "./Tournament";
-import { MAX_STRIKES, roundName, type Fx, type Match, type PublicState, type Team } from "@/lib/types";
+import { Heist, HEIST_MS, type HeistInfo } from "./Heist";
+import { isOut, strikeLimit, roundName, type Fx, type Match, type PublicState, type Team } from "@/lib/types";
 
 type Overlay =
   | { kind: "intro"; key: number; number: number; multiplier: number }
-  | { kind: "strike"; key: number; team: Team; count: number }
+  | { kind: "strike"; key: number; team: Team; count: number; limit: number }
   | { kind: "buzz"; key: number; team: Team }
-  | { kind: "steal"; key: number; team: Team; points: number };
+  | { kind: "heist"; key: number; info: HeistInfo };
 
 const viewMotion = {
   initial: { opacity: 0, y: 24, filter: "blur(6px)" },
@@ -84,7 +85,7 @@ export function Screen() {
           [0, -1, 1.2, -1.4, 1.4, -1, 0.6, 0].map((x) => ({ transform: `translate3d(${x}vw,0,0)` })),
           { duration: 520, easing: "cubic-bezier(.36,.07,.19,.97)" },
         );
-        if (t) showOverlay({ kind: "strike", key: fx.id, team: t, count: fx.count }, 1900);
+        if (t) showOverlay({ kind: "strike", key: fx.id, team: t, count: fx.count, limit: fx.limit ?? 3 }, 1900);
         break;
       }
       case "revealAll":
@@ -100,10 +101,13 @@ export function Screen() {
         play("pop");
         break;
       case "steal": {
-        const t = team(fx.teamId);
-        play("correct");
-        setTimeout(() => play("fanfare"), 350);
-        if (t) showOverlay({ kind: "steal", key: fx.id, team: t, points: fx.points }, 2600);
+        const from = team(fx.from);
+        const to = team(fx.to);
+        if (!from || !to) break;
+        // skóre po krádeži; v duelu se ukazují body z duelu (jako na liště dole)
+        const m = st.bracket?.matches.find((x) => x.id === st.matchId);
+        const scoreOf = (t: Team) => (m ? (m.a === t.id ? m.scoreA : m.b === t.id ? m.scoreB : t.score) : t.score);
+        showOverlay({ kind: "heist", key: fx.id, info: { from, to, points: fx.points, fromScore: scoreOf(from), toScore: scoreOf(to) } }, HEIST_MS);
         break;
       }
       // losování, duel a postup ozvučují samy komponenty (časování animací)
@@ -245,10 +249,10 @@ export function Screen() {
                     <BigX key={i} className="big-x" style={{ animationDelay: `${i * 90}ms` }} />
                   ))}
                 </div>
-                {overlay.count >= MAX_STRIKES && <div className="stamp">Vyřazeni</div>}
+                {overlay.count >= overlay.limit && <div className="stamp">Vyřazeni</div>}
                 <div className="strike-label">
                   {overlay.team.name}
-                  <small>{overlay.count >= MAX_STRIKES ? "Konec pokusů — vyřazeni!" : `${overlay.count}. pokus vedle`}</small>
+                  <small>{overlay.count >= overlay.limit ? "Konec pokusů — vyřazeni!" : `${overlay.count}. pokus vedle`}</small>
                 </div>
               </div>
             </div>
@@ -267,19 +271,7 @@ export function Screen() {
             </div>
           )}
 
-          {overlay?.kind === "steal" && (
-            <div className="overlay buzz-ov steal-ov" key={overlay.key}>
-              <div className="rays" />
-              <div className="buzz-inner">
-                <span className="buzz-em">
-                  <TeamIcon name={overlay.team.icon} />
-                </span>
-                <span className="steal-word">Ukradeno!</span>
-                <span className="buzz-name">{overlay.team.name}</span>
-                <span className="buzz-sub">berou {overlay.points} bodů</span>
-              </div>
-            </div>
-          )}
+          {overlay?.kind === "heist" && <Heist key={overlay.key} info={overlay.info} />}
 
           {suspense && (
             <div className="suspense-ov" aria-hidden>
@@ -516,8 +508,11 @@ function Board({ st, fx }: { st: PublicState; fx: Fx | null }) {
                           {a.text}
                         </span>
                         {by && (
-                          <span className="card-by">
-                            <TeamIcon name={by.icon} />
+                          <span className="card-by" key={by.id}>
+                            <span className="card-by-ic">
+                              <TeamIcon name={by.icon} />
+                            </span>
+                            <span className="card-by-name">{by.name}</span>
                           </span>
                         )}
                         <span className="card-pts">{a.points}</span>
@@ -551,14 +546,14 @@ function DuelBar({ st, match, fx }: { st: PublicState; match: Match; fx: Fx | nu
     const n = round.strikes[t.id] ?? 0;
     const onTurn = round.turn === t.id;
     return (
-      <div className={`duelbar-side ${right ? "right" : ""} ${onTurn ? "turn" : ""} ${n >= MAX_STRIKES ? "out" : ""}`}>
+      <div className={`duelbar-side ${right ? "right" : ""} ${onTurn ? "turn" : ""} ${isOut(round, t.id) ? "out" : ""}`}>
         <span className="em">
           <TeamIcon name={t.icon} />
         </span>
         <div className="duelbar-info">
           <span className="duelbar-name">{t.name}</span>
           <span className="strikes">
-            {Array.from({ length: MAX_STRIKES }, (_, i) => (
+            {Array.from({ length: strikeLimit(round, t.id) }, (_, i) => (
               <span key={i} className={`strike ${i < n ? "on" : ""}`}>
                 {i < n && <XIcon />}
               </span>
@@ -594,7 +589,7 @@ function TeamBar({ st, fx }: { st: PublicState; fx: Fx | null }) {
       {st.teams.map((t) => {
         const n = strikes[t.id] ?? 0;
         return (
-          <motion.div layout key={t.id} className={`chip ${n >= MAX_STRIKES ? "out" : ""} ${t.online ? "" : "offline"}`}>
+          <motion.div layout key={t.id} className={`chip ${isOut(st.round, t.id) ? "out" : ""} ${t.online ? "" : "offline"}`}>
             <span className="em">
               <TeamIcon name={t.icon} />
             </span>
@@ -604,7 +599,7 @@ function TeamBar({ st, fx }: { st: PublicState; fx: Fx | null }) {
                 <CountUp value={t.score} delay={600} />
               </span>
               <span className="strikes">
-                {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                {Array.from({ length: strikeLimit(st.round, t.id) }, (_, i) => (
                   <span key={i} className={`strike ${i < n ? "on" : ""}`}>
                     {i < n && <XIcon />}
                   </span>

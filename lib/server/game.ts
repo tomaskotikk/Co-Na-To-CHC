@@ -4,6 +4,8 @@ import type { Server, Socket } from "socket.io";
 import {
   TEAM_ICONS,
   MAX_STRIKES,
+  isOut,
+  strikeLimit,
   MAX_TEAMS,
   nextMatch,
   type Ack,
@@ -201,7 +203,9 @@ export class Game {
       questionIndex: saved?.questionIndex ?? -1,
       rulesPage: Math.min(Math.max(Number(saved?.rulesPage) || 0, 0), RULES.length - 1),
       // starší uložený stav neměl duely
-      round: saved?.round ? { ...({ matchId: null, phase: "play", turn: null } as const), ...(saved.round as Partial<Round>) } as Round : null,
+      round: saved?.round
+        ? ({ ...({ matchId: null, phase: "play", turn: null, stealOffer: null } as const), ...(saved.round as Partial<Round>) } as Round)
+        : null,
       bracket: saved?.bracket ?? null,
       matchId: saved?.matchId ?? null,
       used: Array.isArray(saved?.used) ? saved.used : [],
@@ -401,6 +405,35 @@ export class Game {
       }
       case "goto":
         return this.openQuestion(cmd.index);
+      case "steal": {
+        const offer = this.s.round?.stealOffer;
+        if (!offer) return "Žádná krádež k potvrzení.";
+        const from = this.s.teams.find((t) => t.id === offer.from);
+        const to = this.s.teams.find((t) => t.id === offer.to);
+        this.flushPending();
+        this.apply(() => {
+          const round = this.s.round!;
+          round.stealOffer = null;
+          if (!cmd.accept || !from || !to) return;
+          const m = this.currentMatch();
+          const give = (team: Team, pts: number) => {
+            team.score += pts;
+            if (m?.a === team.id) m.scoreA += pts;
+            else if (m?.b === team.id) m.scoreB += pts;
+          };
+          let moved = 0;
+          for (const r of round.revealed) {
+            if (r?.by !== from.id) continue;
+            r.by = to.id;
+            moved += r.points;
+          }
+          give(from, -moved);
+          give(to, moved);
+          this.s.view = "board";
+          this.emitFx({ kind: "steal", from: from.id, to: to.id, points: moved });
+        });
+        return null;
+      }
       case "rules": {
         const page = Math.min(Math.max(Math.trunc(Number(cmd.page)) || 0, 0), RULES.length - 1);
         this.flushPending();
@@ -499,6 +532,7 @@ export class Game {
         if (cmd.teamId && !team) return "Tým neexistuje.";
         const duel = this.currentMatch();
         if (team && duel && team.id !== duel.a && team.id !== duel.b) return "Tým v tomhle duelu nehraje.";
+        if (team && isOut(this.s.round, team.id)) return `${team.name} už nemají pokusy — z téhle otázky jsou venku.`;
         const label = `Otočit #${cmd.index + 1}${team ? ` → ${team.name}` : " (bez bodů)"}`;
         this.schedule(label, () => {
           const round = this.s.round;
@@ -513,23 +547,15 @@ export class Game {
           };
           if (t) give(t, points);
           round.revealed[cmd.index] = { by: t?.id ?? null, points };
-          // krádež: soupeř má 3 X a tým na tahu trefil → bere body ze všech karet, které nahrál soupeř
+          // krádež: soupeř má 3 X a tým dohádal VŠECHNY zbylé karty sám → nabídnout adminovi
           const rivalId = m && t ? (m.a === t.id ? m.b : m.b === t.id ? m.a : null) : null;
-          const rival = rivalId ? this.s.teams.find((x) => x.id === rivalId) : undefined;
-          let stolen = 0;
-          if (t && rival && round.turn === t.id && (round.strikes[rival.id] ?? 0) >= MAX_STRIKES && (round.strikes[t.id] ?? 0) < MAX_STRIKES) {
-            for (const r of round.revealed) {
-              if (r?.by !== rival.id) continue;
-              give(rival, -r.points);
-              give(t, r.points);
-              r.by = t.id;
-              stolen += r.points;
-            }
+          if (t && rivalId && isOut(round, rivalId) && round.revealed.every((r) => r && (r.by === t.id || r.by === rivalId))) {
+            const loot = round.revealed.reduce((n, r) => n + (r?.by === rivalId ? r.points : 0), 0);
+            if (loot > 0) round.stealOffer = { from: rivalId, to: t.id, points: loot };
           }
           round.phase = "play";
           this.s.view = "board";
-          if (stolen > 0 && t) this.emitFx({ kind: "steal", teamId: t.id, points: stolen + points });
-          else this.emitFx({ kind: "flip", index: cmd.index, teamId: t?.id ?? null, points: t ? points : 0 });
+          this.emitFx({ kind: "flip", index: cmd.index, teamId: t?.id ?? null, points: t ? points : 0 });
         });
         return null;
       }
@@ -539,20 +565,25 @@ export class Game {
         const inDuel = this.currentMatch();
         if (inDuel && team.id !== inDuel.a && team.id !== inDuel.b) return "Tým v tomhle duelu nehraje.";
         if (this.s.round.phase === "question") return "Nejdřív musí někdo zabzučet (nebo klepni nahoře na tým, který je na tahu).";
-        if ((this.s.round.strikes[team.id] ?? 0) >= MAX_STRIKES) return "Tým už má 3 pokusy pryč.";
+        if (isOut(this.s.round, team.id)) return "Tým už nemá žádný pokus.";
         this.schedule(`BZZZ → ${team.name}`, () => {
           const round = this.s.round;
           if (!round || !this.s.teams.some((t) => t.id === team.id)) return;
-          const count = Math.min(MAX_STRIKES, (round.strikes[team.id] ?? 0) + 1);
+          const limit = strikeLimit(round, team.id);
+          const count = Math.min(limit, (round.strikes[team.id] ?? 0) + 1);
           round.strikes[team.id] = count;
-          // po třetí chybě přechází tah na soupeře (šance ukrást body)
+          // vyčerpané pokusy → hraje soupeř, ale jen tolikrát, kolik zbývá karet (max 3);
+          // X z rozehry u stolu se mu nepočítají
           const m = this.currentMatch();
           const rival = m ? (m.a === team.id ? m.b : m.b === team.id ? m.a : null) : null;
-          if (count >= MAX_STRIKES && round.turn === team.id && rival && (round.strikes[rival] ?? 0) < MAX_STRIKES) {
+          const left = round.revealed.filter((r) => !r).length;
+          if (count >= limit && round.turn === team.id && rival && !isOut(round, rival) && left > 0) {
             round.turn = rival;
+            round.strikes[rival] = 0;
+            round.limits = { ...round.limits, [rival]: Math.min(MAX_STRIKES, left) };
           }
           this.s.view = "board";
-          this.emitFx({ kind: "strike", teamId: team.id, count });
+          this.emitFx({ kind: "strike", teamId: team.id, count, limit });
         });
         return null;
       }
@@ -755,7 +786,7 @@ export class Game {
   }
 
   private newRound(q: Question): Round {
-    return { questionId: q.id, matchId: this.s.matchId, phase: "question", turn: null, revealed: q.answers.map(() => null), strikes: {} };
+    return { questionId: q.id, matchId: this.s.matchId, phase: "question", turn: null, revealed: q.answers.map(() => null), strikes: {}, stealOffer: null, limits: {} };
   }
 
   private currentMatch(): Match | null {

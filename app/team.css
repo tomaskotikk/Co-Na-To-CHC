@@ -301,6 +301,14 @@
   background: rgba(0, 0, 0, 0.92);
   color: var(--white);
 }
+.tm-flash.stole {
+  background: var(--y);
+  color: var(--ink);
+}
+.tm-flash.robbed {
+  background: #c81e1e;
+  color: var(--white);
+}
 .tm-flash-inner {
   display: flex;
   flex-direction: column;

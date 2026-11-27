@@ -1284,15 +1284,44 @@
   height: 1em;
   vertical-align: -0.15em;
 }
+/* kdo kartu uhodl: ikona + jméno týmu */
 .card-by {
-  display: grid;
-  place-items: center;
-  width: calc(var(--u) * 3.4);
-  height: calc(var(--u) * 3.4);
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 34%;
+  padding: 0.25em 0.75em 0.25em 0.25em;
+  border-radius: 999px;
   background: var(--ink);
   color: var(--y);
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: calc(var(--u) * 1.25);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   filter: none;
+  animation: byIn 0.5s var(--ease-back) both;
+}
+.card-by-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.1em;
+  height: 2.1em;
+  border-radius: 50%;
+  background: var(--y);
+  color: var(--ink);
+}
+.card-by-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-back.dim .card-by {
+  display: none;
+}
+@keyframes byIn {
+  from { transform: scale(0.3); opacity: 0; }
 }
 .buzz-em {
   display: grid;
@@ -2298,4 +2327,436 @@
   font-size: calc(var(--u) * 3);
   letter-spacing: 0.3em;
   color: var(--white);
+}
+
+/* ═════════ KRÁDEŽ (Heist.tsx) ═════════
+   Celá scéna trvá --T (7.6 s); klíčové snímky v % z --T:
+   11.8 % zloděj vyráží · 34.2 % je u bodů · 39.5 % sebral body · 48.7 % je uprostřed
+   51.3 % hází · 60.5 % body dopadnou · 71 % razítko · 77.6 % zloděj zmizel */
+
+.heist {
+  display: block;
+  z-index: 30;
+  /* neprůhledné — pod animací už je přepočítané skóre, nesmí prosvítat */
+  background: #080808;
+  overflow: hidden;
+  animation: heistFade var(--T) linear both;
+}
+@keyframes heistFade {
+  0% { opacity: 0; }
+  3% { opacity: 1; }
+  94% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.heist > * {
+  position: absolute;
+  animation-duration: var(--T);
+  animation-fill-mode: both;
+  animation-timing-function: linear;
+}
+
+/* poplach — červené blikání a otáčivý maják, jen dokud se zloděj plíží */
+.heist-alarm {
+  inset: 0;
+  animation-name: alarmLife;
+}
+.heist-alarm::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(232, 50, 47, 0.55), rgba(232, 50, 47, 0.08) 70%);
+  animation: alarmPulse 0.42s ease-in-out infinite alternate;
+}
+@keyframes alarmPulse {
+  from { opacity: 0.15; }
+  to { opacity: 1; }
+}
+@keyframes alarmLife {
+  0% { opacity: 1; }
+  34% { opacity: 1; }
+  40% { opacity: 0.25; }
+  100% { opacity: 0.15; }
+}
+.heist-beacon {
+  left: 50%;
+  top: -60vmax;
+  width: 120vmax;
+  height: 120vmax;
+  translate: -50% 0;
+  background: conic-gradient(from 0deg, rgba(232, 50, 47, 0.35) 0deg 22deg, transparent 22deg 180deg, rgba(232, 50, 47, 0.35) 180deg 202deg, transparent 202deg);
+  animation: beaconSpin 1.1s linear infinite, alarmLife var(--T) linear both;
+}
+@keyframes beaconSpin {
+  to { rotate: 360deg; }
+}
+
+.heist-title {
+  left: 0;
+  right: 0;
+  top: 6%;
+  text-align: center;
+  font-family: var(--font-d);
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: calc(var(--u) * 8);
+  letter-spacing: 0.04em;
+  color: var(--y);
+  text-shadow: 0 0 calc(var(--u) * 2) rgba(232, 50, 47, 0.8);
+  animation-name: titleLife;
+}
+.heist-siren {
+  display: inline-block;
+  animation: sirenWobble 0.3s ease-in-out infinite alternate;
+}
+@keyframes sirenWobble {
+  from { transform: rotate(-12deg) scale(0.95); }
+  to { transform: rotate(12deg) scale(1.1); }
+}
+@keyframes titleLife {
+  0% { opacity: 0; transform: scale(2.4); }
+  4% { opacity: 1; transform: scale(1); }
+  8%, 16%, 24%, 32% { color: var(--y); }
+  12%, 20%, 28% { color: #ff3b38; }
+  34% { opacity: 1; transform: scale(1); }
+  38% { opacity: 0; transform: scale(0.8); }
+  100% { opacity: 0; }
+}
+
+/* skóre týmů */
+.heist-box {
+  top: 26%;
+  width: 26%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.6);
+  padding: calc(var(--u) * 2.2) calc(var(--u) * 1.6);
+  border-radius: calc(var(--u) * 1.8);
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 var(--y);
+  font-family: var(--font-d);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.heist-box.victim {
+  left: 7%;
+  animation-name: victimMad;
+}
+.heist-box.robber {
+  right: 7%;
+  animation-name: robberWin;
+}
+.heist-em {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 8);
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--y);
+  font-size: calc(var(--u) * 4.4);
+}
+.heist-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--u) * 2.6);
+  line-height: 1.1;
+}
+.heist-score {
+  font-size: calc(var(--u) * 7);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes victimMad {
+  0% { opacity: 0; transform: translateX(-40%) rotate(-1.5deg); }
+  6% { opacity: 1; transform: none; }
+  39% { transform: rotate(-1.5deg); background: var(--white); box-shadow: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 var(--y); }
+  40% { transform: rotate(-5deg) translateX(calc(var(--u) * -1)); background: #ffd9d6; box-shadow: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 #e8322f; }
+  41.5% { transform: rotate(4deg) translateX(calc(var(--u) * 1)) translateY(calc(var(--u) * -1)); }
+  43% { transform: rotate(-5deg) translateX(calc(var(--u) * -1)); }
+  44.5% { transform: rotate(4deg) translateX(calc(var(--u) * 1)) translateY(calc(var(--u) * -0.6)); }
+  46% { transform: rotate(-4deg); }
+  47.5% { transform: rotate(3deg) translateY(calc(var(--u) * -0.6)); }
+  49% { transform: rotate(-3deg); }
+  52% { transform: rotate(2deg); }
+  56%, 62%, 68% { transform: rotate(-2deg) scale(0.97); }
+  59%, 65% { transform: rotate(2deg) scale(0.97); }
+  100% { transform: rotate(-2deg) scale(0.95); background: #ffd9d6; box-shadow: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 #e8322f; }
+}
+@keyframes robberWin {
+  0% { opacity: 0; transform: translateX(40%) rotate(1.5deg); }
+  6% { opacity: 1; transform: rotate(1.5deg); }
+  60% { transform: rotate(1.5deg) scale(1); box-shadow: calc(var(--u) * 0.8) calc(var(--u) * 0.8) 0 var(--y); }
+  62% { transform: rotate(-3deg) scale(1.14); box-shadow: 0 0 calc(var(--u) * 5) var(--y); }
+  66% { transform: rotate(2deg) scale(1.06); }
+  70%, 100% { transform: rotate(1.5deg) scale(1.08); box-shadow: 0 0 calc(var(--u) * 3) var(--y); }
+}
+
+/* okradení zuří */
+.heist-angry {
+  position: absolute;
+  top: calc(var(--u) * -3.5);
+  left: calc(var(--u) * -3);
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 7.5);
+  height: calc(var(--u) * 7.5);
+  border-radius: 50%;
+  background: #e8322f;
+  color: var(--white);
+  border: calc(var(--u) * 0.4) solid var(--ink);
+  animation: angryPop var(--T) linear both;
+}
+.heist-angry svg {
+  width: 70%;
+  height: 70%;
+  stroke-width: 2.4;
+}
+@keyframes angryPop {
+  0%, 39.5% { transform: scale(0) rotate(-30deg); }
+  42% { transform: scale(1.4) rotate(10deg); }
+  44% { transform: scale(1) rotate(-8deg); }
+  48%, 56%, 64%, 72%, 80% { transform: scale(1.12) rotate(8deg); }
+  52%, 60%, 68%, 76%, 100% { transform: scale(1) rotate(-8deg); }
+}
+.heist-steam {
+  position: absolute;
+  top: 10%;
+  font-size: calc(var(--u) * 4);
+  opacity: 0;
+  animation: steamUp var(--T) linear both;
+}
+.heist-steam.s1 {
+  right: 8%;
+}
+.heist-steam.s2 {
+  right: 26%;
+  animation-delay: 0.35s;
+}
+@keyframes steamUp {
+  0%, 41% { opacity: 0; transform: translateY(0) scale(0.6); }
+  44% { opacity: 1; }
+  56% { opacity: 0; transform: translateY(calc(var(--u) * -9)) scale(1.3); }
+  57%, 62% { opacity: 0; transform: translateY(0) scale(0.6); }
+  65% { opacity: 1; }
+  77% { opacity: 0; transform: translateY(calc(var(--u) * -9)) scale(1.3); }
+  100% { opacity: 0; }
+}
+
+/* bubliny „NEEEE!“ a „HEHEHE“ */
+.heist-say {
+  position: absolute;
+  padding: 0.35em 0.7em 0.25em;
+  border-radius: calc(var(--u) * 1.2);
+  background: var(--y);
+  color: var(--ink);
+  border: calc(var(--u) * 0.3) solid var(--ink);
+  font-family: var(--font-d);
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: calc(var(--u) * 3);
+}
+.victim-say {
+  top: calc(var(--u) * -7);
+  right: calc(var(--u) * -4);
+  background: #e8322f;
+  color: var(--white);
+  animation: sayVictim var(--T) linear both;
+}
+@keyframes sayVictim {
+  0%, 40% { opacity: 0; transform: scale(0.2) rotate(-12deg); }
+  42% { opacity: 1; transform: scale(1.2) rotate(6deg); }
+  44% { transform: scale(1) rotate(-4deg); }
+  70% { opacity: 1; transform: scale(1) rotate(-4deg); }
+  73%, 100% { opacity: 0; transform: scale(0.6); }
+}
+.thief-say {
+  bottom: 100%;
+  left: 40%;
+  animation: sayThief var(--T) linear both;
+}
+@keyframes sayThief {
+  0%, 59% { opacity: 0; transform: scale(0.2) rotate(8deg); }
+  61% { opacity: 1; transform: scale(1.15) rotate(-4deg); }
+  63% { transform: scale(1) rotate(3deg); }
+  74% { opacity: 1; }
+  77%, 100% { opacity: 0; }
+}
+
+/* body jako žlutý žeton */
+.heist-loot {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 10);
+  height: calc(var(--u) * 10);
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--y-hi), var(--y) 55%, var(--y-lo));
+  border: calc(var(--u) * 0.45) solid var(--ink);
+  box-shadow: 0 0 calc(var(--u) * 3) rgba(255, 213, 0, 0.8);
+  color: var(--ink);
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: calc(var(--u) * 3.6);
+  z-index: 3;
+}
+.heist-loot.grab {
+  animation-name: lootGrab;
+}
+@keyframes lootGrab {
+  0% { left: 29%; top: 28%; opacity: 0; transform: scale(0.3); }
+  6% { opacity: 1; transform: scale(1.2); }
+  9% { transform: scale(1); }
+  20% { transform: scale(1.08); }
+  30% { transform: scale(1); }
+  34.2% { left: 29%; top: 28%; transform: scale(1) rotate(0); }
+  37% { left: 20%; top: 52%; transform: scale(0.75) rotate(-90deg); }
+  39.5% { left: 12%; top: 71%; transform: scale(0.3) rotate(-200deg); opacity: 1; }
+  40.5%, 100% { left: 12%; top: 71%; opacity: 0; }
+}
+.heist-loot.fly {
+  animation-name: lootFly;
+}
+@keyframes lootFly {
+  0%, 51% { left: 47%; top: 66%; opacity: 0; transform: scale(0.4); }
+  51.3% { opacity: 1; transform: scale(0.6); animation-timing-function: ease-out; }
+  55.5% { left: 63%; top: 12%; transform: scale(1.25) rotate(220deg); animation-timing-function: ease-in; }
+  60.5% { left: 80%; top: 30%; transform: scale(1) rotate(400deg); opacity: 1; }
+  62.5% { left: 80%; top: 30%; transform: scale(2) rotate(400deg); opacity: 0; }
+  100% { left: 80%; top: 30%; opacity: 0; }
+}
+.heist-burst {
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: calc(var(--u) * 1) dashed var(--y);
+  opacity: 0;
+  animation: burst var(--T) linear both;
+}
+@keyframes burst {
+  0%, 60% { opacity: 0; transform: scale(0.2) rotate(0); }
+  60.5% { opacity: 1; }
+  68%, 100% { opacity: 0; transform: scale(3) rotate(90deg); }
+}
+
+/* zloděj */
+.heist-runner {
+  bottom: 6%;
+  width: calc(var(--u) * 13);
+  translate: -50% 0;
+  z-index: 4;
+  animation-name: runnerMove;
+}
+@keyframes runnerMove {
+  0%, 11.8% { left: -12%; }
+  34.2% { left: 15%; } /* plíží se k bodům */
+  39.5% { left: 15%; } /* bere je */
+  48.7% { left: 45%; } /* běží doprostřed */
+  64.5% { left: 45%; } /* hodí a směje se */
+  77.6%, 100% { left: 115%; } /* zdrhá */
+}
+.thief {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 calc(var(--u) * 0.6) 0 rgba(0, 0, 0, 0.5));
+}
+.thief-body {
+  animation: thiefBob 0.24s ease-in-out infinite alternate;
+}
+@keyframes thiefBob {
+  to { transform: translateY(-4px); }
+}
+.thief-leg {
+  transform-box: view-box;
+  transform-origin: 78px 132px;
+  animation: legSwing 0.24s ease-in-out infinite alternate;
+}
+.thief-leg.r {
+  animation-direction: alternate-reverse;
+}
+@keyframes legSwing {
+  from { transform: rotate(-24deg); }
+  to { transform: rotate(24deg); }
+}
+.thief-arm {
+  transform-box: view-box;
+  transform-origin: 96px 84px;
+  animation: thiefThrow var(--T) linear both;
+}
+@keyframes thiefThrow {
+  0%, 49% { transform: rotate(0); }
+  51% { transform: rotate(-150deg); }
+  56% { transform: rotate(-130deg); }
+  60%, 100% { transform: rotate(0); }
+}
+.thief-sack {
+  transform-box: view-box;
+  transform-origin: 34px 100px;
+  animation: sackGulp var(--T) linear both;
+}
+@keyframes sackGulp {
+  0%, 39% { transform: scale(1); }
+  40.5% { transform: scale(1.25); }
+  42.5% { transform: scale(0.95); }
+  44%, 49% { transform: scale(1.1); }
+  51.3%, 100% { transform: scale(0.9); }
+}
+.thief-eye {
+  animation: shifty 0.9s steps(2) infinite;
+}
+@keyframes shifty {
+  from { transform: translateX(-2px); }
+  to { transform: translateX(2px); }
+}
+
+/* závěrečné razítko */
+.heist-final {
+  left: 0;
+  right: 0;
+  top: 2.5%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 1);
+  animation-name: finalLife;
+}
+@keyframes finalLife {
+  0%, 70% { opacity: 0; }
+  71%, 100% { opacity: 1; }
+}
+.heist-stamp {
+  padding: 0.12em 0.5em 0.02em;
+  border: calc(var(--u) * 0.7) solid #e8322f;
+  border-radius: calc(var(--u) * 1.4);
+  color: #e8322f;
+  font-family: var(--font-d);
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: calc(var(--u) * 7.5);
+  letter-spacing: 0.06em;
+  background: rgba(8, 8, 8, 0.6);
+  animation: stampIn var(--T) linear both;
+}
+@keyframes stampIn {
+  0%, 70.5% { transform: scale(3) rotate(-14deg); opacity: 0; }
+  73% { transform: scale(0.92) rotate(-7deg); opacity: 1; }
+  75%, 100% { transform: scale(1) rotate(-7deg); opacity: 1; }
+}
+.heist-sub {
+  font-size: calc(var(--u) * 2.4);
+  color: var(--white);
+}
+.heist-sub b {
+  color: var(--y);
 }

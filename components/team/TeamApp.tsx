@@ -6,7 +6,7 @@ import { Bubble, Logo } from "@/components/Logo";
 import { CountUp, XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
 import { emitAck, getSocket, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
-import { champion, MAX_STRIKES, roundName, type Ack, type PublicState, type Team } from "@/lib/types";
+import { champion, isOut, strikeLimit, roundName, type Ack, type PublicState, type Team } from "@/lib/types";
 
 const TEAM_KEY = "chc-team";
 
@@ -24,7 +24,17 @@ function storedTeam() {
   }
 }
 
-type Flash = { key: number; kind: "plus"; points: number } | { key: number; kind: "strike"; count: number } | null;
+type Flash =
+  | { key: number; kind: "plus"; points: number }
+  | { key: number; kind: "strike"; count: number; limit: number }
+  /** krádež: zloděj (+) / okradený (−) */
+  | { key: number; kind: "stole"; points: number }
+  | { key: number; kind: "robbed"; points: number }
+  | null;
+
+/** kdy na projektoru zloděj sebere / hodí body — telefon se ozve ve stejnou chvíli */
+const STEAL_GRAB_MS = 3000;
+const STEAL_LAND_MS = 4700;
 
 export function TeamApp({ initialCode }: { initialCode: string }) {
   const [teamId, setTeamId] = useState<string | null>(null);
@@ -71,12 +81,21 @@ export function TeamApp({ initialCode }: { initialCode: string }) {
       return;
     }
     seenFx.current = fx.id;
-    if ((fx.kind === "flip" || fx.kind === "steal") && fx.teamId === teamId) {
+    if (fx.kind === "flip" && fx.teamId === teamId) {
       vibrate([40, 60, 40, 60, 120]);
       setFlash({ key: fx.id, kind: "plus", points: fx.points });
+    } else if (fx.kind === "steal" && (fx.from === teamId || fx.to === teamId)) {
+      const robbed = fx.from === teamId;
+      setTimeout(
+        () => {
+          vibrate(robbed ? [400, 80, 400] : [40, 60, 40, 60, 160]);
+          setFlash(robbed ? { key: fx.id, kind: "robbed", points: fx.points } : { key: fx.id, kind: "stole", points: fx.points });
+        },
+        robbed ? STEAL_GRAB_MS : STEAL_LAND_MS,
+      );
     } else if (fx.kind === "strike" && fx.teamId === teamId) {
       vibrate(500);
-      setFlash({ key: fx.id, kind: "strike", count: fx.count });
+      setFlash({ key: fx.id, kind: "strike", count: fx.count, limit: fx.limit ?? 3 });
     } else if (fx.kind === "buzz" || fx.kind === "turn") {
       if (fx.teamId === teamId) vibrate([80, 50, 80, 50, 200]);
     } else if (fx.kind === "duel") {
@@ -142,6 +161,16 @@ export function TeamApp({ initialCode }: { initialCode: string }) {
                   <span className="tm-flash-big">+{flash.points}</span>
                   <span>Trefa!</span>
                 </>
+              ) : flash.kind === "stole" ? (
+                <>
+                  <span className="tm-flash-big">+{flash.points}</span>
+                  <span>Ukradeno! 🦹</span>
+                </>
+              ) : flash.kind === "robbed" ? (
+                <>
+                  <span className="tm-flash-big">−{flash.points}</span>
+                  <span>Okradli vás!</span>
+                </>
               ) : (
                 <>
                   <span className="tm-flash-xs">
@@ -149,7 +178,7 @@ export function TeamApp({ initialCode }: { initialCode: string }) {
                       <XIcon key={i} stroke="#ffd500" />
                     ))}
                   </span>
-                  <span>{flash.count >= MAX_STRIKES ? "Vyřazeni z otázky" : "Vedle!"}</span>
+                  <span>{flash.count >= flash.limit ? "Vyřazeni z otázky" : "Vedle!"}</span>
                 </>
               )}
             </motion.div>
@@ -273,11 +302,11 @@ function TeamView({ st, team }: { st: PublicState; team: Team }) {
           </Panel>
         ) : (
           <Panel tone="dark" big={`Na tahu: ${nameOf(round.turn)}`}>
-            {strikes >= MAX_STRIKES ? "Máte 3 chyby — čekejte." : "Poslouchejte, třeba přijde vaše šance."}
+            {isOut(round, team.id) ? "Pokusy jsou pryč — čekejte." : "Poslouchejte, třeba přijde vaše šance."}
           </Panel>
         )}
         <DuelScore st={st} me={team.id} />
-        {st.question && <QuestionCard text={st.question.text} strikes={strikes} />}
+        {st.question && <QuestionCard text={st.question.text} strikes={strikes} limit={strikeLimit(round, team.id)} />}
       </div>
     );
   } else if (st.view === "duel" && inMatch) {
@@ -381,13 +410,13 @@ function DuelScore({ st, me }: { st: PublicState; me: string }) {
   );
 }
 
-function QuestionCard({ text, strikes }: { text: string; strikes: number }) {
+function QuestionCard({ text, strikes, limit }: { text: string; strikes: number; limit: number }) {
   return (
     <div className="tm-card">
       <span className="tm-q-label">Otázka</span>
       <p className="tm-q">{text}</p>
       <div className="tm-strikes">
-        {Array.from({ length: MAX_STRIKES }, (_, i) => (
+        {Array.from({ length: limit }, (_, i) => (
           <span key={i} className={i < strikes ? "on" : ""}>
             {i < strikes && <XIcon />}
           </span>

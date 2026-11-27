@@ -43,12 +43,12 @@ export const RULES: RuleSlide[] = [
   },
   {
     title: "3 chyby = krádež",
-    lead: "Po třetím X tým končí a šanci dostane soupeř.",
+    lead: "Po třetím X tým končí a hrát pokračuje soupeř.",
     items: [
-      { icon: "users", strong: "Soupeř se smí krátce poradit", text: "— pak kapitán řekne JEDNU odpověď." },
-      { icon: "hand", strong: "Trefa → ukradne VŠECHNY body", text: "z otázky, i ty, co nahrál druhý tým." },
-      { icon: "x", strong: "Vedle", text: "→ body si nechává tým, který hrál." },
-      { icon: "megaphone", text: "Nakonec se odkryjí zbylé karty." },
+      { icon: "users", strong: "Soupeř hádá zbylé karty", text: "— každá trefa = body pro něj." },
+      { icon: "x", strong: "Pokusů má tolik, kolik zbývá karet", text: "(nejvýš 3). Zbývá jedna karta = jeden pokus." },
+      { icon: "hand", strong: "Dohádá VŠECHNO? Krádež!", text: "Vezme i body, které nahrál první tým." },
+      { icon: "scale", strong: "Nedohádá?", text: "Každý si nechá, co trefil. Zbytek se odkryje." },
     ],
   },
   {

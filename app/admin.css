@@ -1494,3 +1494,43 @@ kbd {
   flex-direction: column;
   gap: 4px;
 }
+
+/* ═════════ KRÁDEŽ ═════════ */
+
+.steal-offer {
+  position: relative;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  border: 2px solid #e8322f;
+  background: linear-gradient(180deg, rgba(232, 50, 47, 0.22), var(--ink-2) 70%);
+  animation: stealGlow 0.8s ease-in-out infinite alternate;
+}
+@keyframes stealGlow {
+  from { box-shadow: 0 0 0 rgba(232, 50, 47, 0); }
+  to { box-shadow: 0 0 26px rgba(232, 50, 47, 0.55); }
+}
+.steal-siren {
+  font-size: 40px;
+  line-height: 1;
+  animation: stealWobble 0.3s ease-in-out infinite alternate;
+}
+@keyframes stealWobble {
+  from { transform: rotate(-12deg); }
+  to { transform: rotate(12deg); }
+}
+.steal-title {
+  font-family: var(--font-d);
+  font-weight: 900;
+  font-size: 30px;
+  text-transform: uppercase;
+  color: #ff5a57;
+  line-height: 1;
+}
+.steal-offer .row-btns {
+  width: 100%;
+}
+.steal-yes {
+  flex: 2 !important;
+  font-size: 18px;
+}

@@ -84,13 +84,20 @@ export type Round = {
   revealed: (RevealInfo | null)[];
   /** počet škrtů (X) na tým v aktuální otázce */
   strikes: Record<string, number>;
+  /** soupeř po 3 X týmu „from“ dohádal všechny zbylé karty → admin potvrdí/odmítne krádež */
+  stealOffer: StealOffer | null;
+  /** kolik X tým v otázce snese (chybí = 3); soupeř po převzetí jen tolik, kolik zbývá karet */
+  limits?: Record<string, number>;
 };
+
+/** krádež: „to“ bere týmu „from“ body ze všech jeho karet v otázce */
+export type StealOffer = { from: string; to: string; points: number };
 
 export type Fx =
   | { id: number; kind: "none" }
   | { id: number; kind: "intro"; number: number }
   | { id: number; kind: "flip"; index: number; teamId: string | null; points: number }
-  | { id: number; kind: "strike"; teamId: string; count: number }
+  | { id: number; kind: "strike"; teamId: string; count: number; limit: number }
   | { id: number; kind: "revealAll" }
   | { id: number; kind: "buzz"; teamId: string }
   | { id: number; kind: "join"; teamId: string }
@@ -100,8 +107,8 @@ export type Fx =
   | { id: number; kind: "draw" }
   | { id: number; kind: "duel"; matchId: string }
   | { id: number; kind: "turn"; teamId: string }
-  /** soupeř po třech X trefil a vzal body z celé otázky */
-  | { id: number; kind: "steal"; teamId: string; points: number }
+  /** soupeř dohádal zbytek po 3 X a admin potvrdil krádež → animace zloděje */
+  | { id: number; kind: "steal"; from: string; to: string; points: number }
   | { id: number; kind: "advance"; matchId: string; teamId: string };
 
 export type Pending = {
@@ -190,11 +197,20 @@ export type AdminCmd =
   | { type: "setTurn"; teamId: string }
   | { type: "endDuel"; winnerId: string }
   | { type: "importSurvey" }
-  | { type: "rules"; page: number };
+  | { type: "rules"; page: number }
+  | { type: "steal"; accept: boolean };
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export const MAX_STRIKES = 3;
+
+/** kolik pokusů má tým v otázce (soupeř po převzetí tolik, kolik zbývá karet, max 3) */
+export const strikeLimit = (round: Pick<Round, "limits"> | null | undefined, teamId: string | null | undefined) =>
+  (teamId && round?.limits?.[teamId]) || MAX_STRIKES;
+
+/** tým má v otázce vyčerpané pokusy */
+export const isOut = (round: Pick<Round, "limits" | "strikes"> | null | undefined, teamId: string | null | undefined) =>
+  !!teamId && (round?.strikes[teamId] ?? 0) >= strikeLimit(round, teamId);
 /** pavouk je hezky čitelný do 8 týmů */
 export const MAX_TEAMS = 8;
 

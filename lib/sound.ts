@@ -18,6 +18,11 @@ export type SoundName =
   | "drumroll"
   | "crash"
   | "applause"
+  | "alarm"
+  | "sneak"
+  | "whoosh"
+  | "sadTrombone"
+  | "laugh"
   | "suspense";
 
 let ctx: AudioContext | null = null;
@@ -383,6 +388,138 @@ function tick() {
   osc("triangle", 1400, t, 0.04, bus(0.8, 0.1), 0.25, 0.001);
 }
 
+// ───────────────────────────── krádež ─────────────────────────────
+
+/** policejní siréna (dvoutón, ~1.6 s) */
+function alarm() {
+  const c = ctx!;
+  const t = c.currentTime;
+  const out = bus(0.55, 0.3);
+  const lp = c.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 2600;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.16, t + 0.04);
+  g.gain.setValueAtTime(0.16, t + 1.5);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.75);
+  lp.connect(g).connect(out);
+  for (const type of ["square", "sawtooth"] as OscillatorType[]) {
+    const o = c.createOscillator();
+    o.type = type;
+    for (let i = 0; i < 4; i++) {
+      o.frequency.setValueAtTime(type === "square" ? 960 : 958, t + i * 0.4);
+      o.frequency.setValueAtTime(type === "square" ? 720 : 718, t + i * 0.4 + 0.2);
+    }
+    o.connect(lp);
+    o.start(t);
+    o.stop(t + 1.8);
+  }
+}
+
+/** plížení po špičkách — tlumené pizzicato basy, chromaticky nahoru a dolů (~1.7 s) */
+function sneak() {
+  const t = ctx!.currentTime;
+  const out = bus(0.95, 0.22);
+  // [půltón od D2, čas] — vlastní „zlodějský“ motiv
+  const steps: [number, number][] = [
+    [0, 0], [1, 0.18], [3, 0.5], [4, 0.68], [7, 1.0], [6, 1.12], [5, 1.24], [4, 1.36], [0, 1.6],
+  ];
+  for (const [semi, at] of steps) {
+    const f = 73.42 * Math.pow(2, semi / 12);
+    osc("triangle", f, t + at, 0.16, out, 0.55, 0.003);
+    osc("sine", f * 2, t + at, 0.08, out, 0.18, 0.002);
+    noise(t + at, 0.02, out, 0.08, "bandpass", 1800, 1.2); // „brnk“ prstu
+  }
+}
+
+/** hod — svist vzduchem */
+function whoosh() {
+  const t = ctx!.currentTime;
+  const out = bus(0.9, 0.35);
+  const f = noise(t, 0.45, out, 0.55, "bandpass", 500, 2, 0.12);
+  f.frequency.setValueAtTime(400, t);
+  f.frequency.exponentialRampToValueAtTime(3200, t + 0.3);
+  f.frequency.exponentialRampToValueAtTime(1200, t + 0.55);
+}
+
+/** smutný trombon „wah wah wah waaah“ pro okradený tým */
+function sadTrombone() {
+  const c = ctx!;
+  const t = c.currentTime;
+  const out = bus(0.8, 0.3);
+  const notes: [number, number, number][] = [
+    [293.7, 0, 0.32],
+    [277.2, 0.38, 0.32],
+    [261.6, 0.76, 0.32],
+    [246.9, 1.14, 1.1],
+  ];
+  for (const [f, at, dur] of notes) {
+    const t0 = t + at;
+    const o = c.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(f, t0);
+    if (dur > 0.5) {
+      // poslední tón se „rozbrečí“
+      const vib = c.createOscillator();
+      const vg = c.createGain();
+      vib.frequency.value = 6;
+      vg.gain.value = 9;
+      vib.connect(vg).connect(o.frequency);
+      vib.start(t0 + 0.15);
+      vib.stop(t0 + dur + 0.1);
+    }
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 4;
+    // „wah“ — dusítko se otevírá a zavírá
+    lp.frequency.setValueAtTime(350, t0);
+    lp.frequency.exponentialRampToValueAtTime(1400, t0 + 0.12);
+    lp.frequency.exponentialRampToValueAtTime(500, t0 + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.05);
+    g.gain.setValueAtTime(0.2, t0 + dur - 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.05);
+    o.connect(lp).connect(g).connect(out);
+    o.start(t0);
+    o.stop(t0 + dur + 0.1);
+  }
+}
+
+/** zlodějský smích „he-he-he-he“ (formanty přes pásmové filtry) */
+function laugh() {
+  const c = ctx!;
+  const t = c.currentTime;
+  const out = bus(0.8, 0.3);
+  for (let i = 0; i < 5; i++) {
+    const t0 = t + i * 0.13;
+    const pitch = 320 - i * 18;
+    const o = c.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(pitch * 1.08, t0);
+    o.frequency.exponentialRampToValueAtTime(pitch, t0 + 0.09);
+    const g = c.createGain();
+    env(g, t0, 0.3, 0.008, 0.09);
+    for (const [ff, q, amp] of [
+      [530, 6, 1],
+      [1850, 8, 0.6],
+    ]) {
+      const bp = c.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = ff;
+      bp.Q.value = q;
+      const a = c.createGain();
+      a.gain.value = amp;
+      o.connect(bp).connect(a).connect(g);
+    }
+    g.connect(out);
+    noise(t0, 0.03, out, 0.06, "highpass", 3000); // přídech „h“
+    o.start(t0);
+    o.stop(t0 + 0.15);
+  }
+}
+
 export const sfx: Record<Exclude<SoundName, "suspense">, () => void> = {
   correct,
   wrong,
@@ -395,6 +532,11 @@ export const sfx: Record<Exclude<SoundName, "suspense">, () => void> = {
   drumroll: () => drumroll(),
   crash,
   applause: () => void playSample("applause"),
+  alarm,
+  sneak,
+  whoosh,
+  sadTrombone,
+  laugh,
 };
 
 function playSample(name: string, loop = false) {

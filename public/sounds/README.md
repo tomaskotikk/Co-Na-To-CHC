@@ -15,6 +15,11 @@ Když sem dáš soubor s jedním z těchto jmen (mp3 / ogg / wav / m4a), přehra
 | `buzz.mp3` | tým zmáčkl bzučák na telefonu |
 | `pop.mp3` | tým se připojil |
 | `tick.mp3` | krok zpět |
+| `alarm.mp3` | krádež — siréna na začátku animace |
+| `sneak.mp3` | krádež — zloděj se plíží k bodům |
+| `whoosh.mp3` | krádež — zloděj hází body |
+| `sadTrombone.mp3` | krádež — okradený tým („wah wah waaah“) |
+| `laugh.mp3` | krádež — zlodějský smích |
 | `applause.mp3` | potlesk po trefě a u vítěze (vestavěný není — hraje jen když ho sem dáš) |
 
 Zvuky musí být tvoje nebo s licencí, která povoluje použití (např. Pixabay, Mixkit, freesound CC0).

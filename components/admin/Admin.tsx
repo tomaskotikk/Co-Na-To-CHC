@@ -31,8 +31,9 @@ import { emitAck, useConnected, useOnConnect, useSocketEvent } from "@/lib/socke
 import { RULES } from "@/lib/rules";
 import {
   champion,
-  MAX_STRIKES,
+  isOut,
   MAX_TEAMS,
+  strikeLimit,
   nextMatch,
   roundName,
   type Ack,
@@ -657,8 +658,40 @@ function QuestionStep({ st, cmd, match, onFlip }: { st: AdminState; cmd: Cmd; ma
   if (!q || !round) return null;
   const asking = round.phase === "question";
 
+  const offer = round.stealOffer;
+  const offerFrom = offer && st.teams.find((t) => t.id === offer.from);
+  const offerTo = offer && st.teams.find((t) => t.id === offer.to);
+
   return (
     <>
+      <AnimatePresence>
+        {offer && offerFrom && offerTo && (
+          <motion.section
+            key="steal"
+            className="card-a steal-offer"
+            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 420, damping: 26 }}
+          >
+            <span className="steal-siren">🚨</span>
+            <h2 className="steal-title">Krádež!</h2>
+            <p>
+              <b>{offerTo.name}</b> dohádali všechno, co zbylo. Vzít týmu <b>{offerFrom.name}</b> jejich <b className="y">{offer.points} bodů</b>?
+            </p>
+            <div className="row-btns">
+              <button className="btn btn-y steal-yes" onClick={() => cmd({ type: "steal", accept: true })}>
+                🦹 Ukrást!
+              </button>
+              <button className="btn" onClick={() => cmd({ type: "steal", accept: false })}>
+                Odmítnout
+              </button>
+            </div>
+            <p className="mute small">Na projektoru se pak spustí animace zloděje (cca 8 s).</p>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
       {match && (
         <section className="card-a duel-head">
           {(["a", "b"] as const).map((side) => {
@@ -669,7 +702,7 @@ function QuestionStep({ st, cmd, match, onFlip }: { st: AdminState; cmd: Cmd; ma
             return (
               <button
                 key={side}
-                className={`dh-side ${turn ? "turn" : ""} ${n >= MAX_STRIKES ? "out" : ""}`}
+                className={`dh-side ${turn ? "turn" : ""} ${isOut(round, id) ? "out" : ""}`}
                 onClick={() => id && !turn && cmd({ type: "setTurn", teamId: id })}
               >
                 {turn && <motion.span layoutId="adm-turn" className="dh-turn">na tahu</motion.span>}
@@ -677,7 +710,7 @@ function QuestionStep({ st, cmd, match, onFlip }: { st: AdminState; cmd: Cmd; ma
                 <span className="dh-name">{t?.name}</span>
                 <span className="dh-score">{side === "a" ? match.scoreA : match.scoreB}</span>
                 <span className="mini-x">
-                  {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                  {Array.from({ length: strikeLimit(round, id) }, (_, i) => (
                     <span key={i} className={i < n ? "on" : ""}>
                       {i < n && <XIcon />}
                     </span>
@@ -741,13 +774,13 @@ function QuestionStep({ st, cmd, match, onFlip }: { st: AdminState; cmd: Cmd; ma
             {st.teams.map((t) => {
               const n = round.strikes[t.id] ?? 0;
               return (
-                <div key={t.id} className={`strike-item ${n >= MAX_STRIKES ? "out" : ""}`}>
+                <div key={t.id} className={`strike-item ${isOut(round, t.id) ? "out" : ""}`}>
                   <span className="t-ic">
                     <TeamIcon name={t.icon} />
                   </span>
                   <span className="strike-name">{t.name}</span>
                   <span className="mini-x">
-                    {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                    {Array.from({ length: strikeLimit(round, t.id) }, (_, i) => (
                       <span key={i} className={i < n ? "on" : ""}>
                         {i < n && <XIcon />}
                       </span>
@@ -1004,7 +1037,8 @@ function TeamSheet({
             <div className={`team-grid ${match ? "duo" : ""}`}>
               {teams.map((t: Team) => {
                 const n = strikes[t.id] ?? 0;
-                const out = sheet.kind === "strike" && n >= MAX_STRIKES;
+                // tým bez pokusů už nemůže ani hádat, ani dostat další X
+                const out = (sheet.kind === "strike" || sheet.kind === "flip") && isOut(st.round, t.id);
                 const primary = sheet.kind === "endDuel" ? t.id === leader : t.id === turn;
                 return (
                   <button key={t.id} className={`team-btn ${primary ? "primary" : ""}`} disabled={out} onClick={() => onPick(t.id)}>
