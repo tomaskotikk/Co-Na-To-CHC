@@ -1431,3 +1431,66 @@ kbd {
   transform: rotate(180deg);
   color: var(--y);
 }
+
+/* ═════════ PRAVIDLA ═════════ */
+
+.rules-pick {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.rules-pick-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--ink-3);
+  border: 1px solid #333;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+.rules-pick-btn span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #333;
+  font-size: 12px;
+}
+.rules-pick-btn.on {
+  background: var(--y);
+  border-color: var(--y);
+  color: var(--ink);
+}
+.rules-pick-btn.on span {
+  background: var(--ink);
+  color: var(--y);
+}
+
+/* tahák pro moderátora: co je právě na plátně */
+.rules-read {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.rules-read-lead {
+  margin-bottom: 6px;
+  color: var(--y);
+  font-weight: 700;
+}
+.rules-read ul {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

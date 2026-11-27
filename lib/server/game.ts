@@ -22,6 +22,7 @@ import {
 } from "../types";
 import type { Storage, Stored } from "./storage";
 import { buildFromSurvey } from "./surveyImport";
+import { RULES } from "../rules";
 
 
 type Persisted = {
@@ -31,6 +32,7 @@ type Persisted = {
   teams: Team[];
   view: View;
   questionIndex: number;
+  rulesPage: number;
   round: Round | null;
   bracket: Bracket | null;
   matchId: string | null;
@@ -68,7 +70,7 @@ function seedOrder(size: number) {
   return order;
 }
 
-const VIEWS: View[] = ["lobby", "intro", "bracket", "duel", "board", "final"];
+const VIEWS: View[] = ["lobby", "intro", "rules", "bracket", "duel", "board", "final"];
 
 function localAddresses(): string[] {
   const out: string[] = [];
@@ -197,6 +199,7 @@ export class Game {
       })),
       view: saved?.view && VIEWS.includes(saved.view) ? saved.view : saved?.bracket ? "bracket" : "lobby",
       questionIndex: saved?.questionIndex ?? -1,
+      rulesPage: Math.min(Math.max(Number(saved?.rulesPage) || 0, 0), RULES.length - 1),
       // starší uložený stav neměl duely
       round: saved?.round ? { ...({ matchId: null, phase: "play", turn: null } as const), ...(saved.round as Partial<Round>) } as Round : null,
       bracket: saved?.bracket ?? null,
@@ -398,6 +401,16 @@ export class Game {
       }
       case "goto":
         return this.openQuestion(cmd.index);
+      case "rules": {
+        const page = Math.min(Math.max(Math.trunc(Number(cmd.page)) || 0, 0), RULES.length - 1);
+        this.flushPending();
+        this.apply(() => {
+          this.s.view = "rules";
+          this.s.rulesPage = page;
+          this.buzzer = this.s.round ? this.buzzer : closedBuzzer();
+        });
+        return null;
+      }
       case "importSurvey":
         // asynchronní — řeší handler admin:cmd
         return null;
@@ -492,16 +505,31 @@ export class Game {
           if (!round || round.questionId !== q.id || round.revealed[cmd.index]) return;
           const points = q.answers[cmd.index].points * q.multiplier;
           const t = cmd.teamId ? this.s.teams.find((x) => x.id === cmd.teamId) : undefined;
-          if (t) {
-            t.score += points;
-            const m = this.currentMatch();
-            if (m?.a === t.id) m.scoreA += points;
-            else if (m?.b === t.id) m.scoreB += points;
-          }
+          const m = this.currentMatch();
+          const give = (team: Team, pts: number) => {
+            team.score += pts;
+            if (m?.a === team.id) m.scoreA += pts;
+            else if (m?.b === team.id) m.scoreB += pts;
+          };
+          if (t) give(t, points);
           round.revealed[cmd.index] = { by: t?.id ?? null, points };
+          // krádež: soupeř má 3 X a tým na tahu trefil → bere body ze všech karet, které nahrál soupeř
+          const rivalId = m && t ? (m.a === t.id ? m.b : m.b === t.id ? m.a : null) : null;
+          const rival = rivalId ? this.s.teams.find((x) => x.id === rivalId) : undefined;
+          let stolen = 0;
+          if (t && rival && round.turn === t.id && (round.strikes[rival.id] ?? 0) >= MAX_STRIKES && (round.strikes[t.id] ?? 0) < MAX_STRIKES) {
+            for (const r of round.revealed) {
+              if (r?.by !== rival.id) continue;
+              give(rival, -r.points);
+              give(t, r.points);
+              r.by = t.id;
+              stolen += r.points;
+            }
+          }
           round.phase = "play";
           this.s.view = "board";
-          this.emitFx({ kind: "flip", index: cmd.index, teamId: t?.id ?? null, points: t ? points : 0 });
+          if (stolen > 0 && t) this.emitFx({ kind: "steal", teamId: t.id, points: stolen + points });
+          else this.emitFx({ kind: "flip", index: cmd.index, teamId: t?.id ?? null, points: t ? points : 0 });
         });
         return null;
       }
@@ -885,6 +913,7 @@ export class Game {
       teams: this.s.teams,
       questionCount: this.questions.length,
       questionIndex: this.s.questionIndex,
+      rulesPage: this.s.rulesPage,
       question:
         q && round
           ? {

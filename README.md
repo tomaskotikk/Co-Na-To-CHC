@@ -24,11 +24,11 @@ Hraje se tým proti týmu. Ideálně 6 týmů (2–8); doplní se do pavouka na 
 
 1. Projektor ukáže **admin QR** → naskenuj telefonem → „Jsem admin“.
 2. Lobby: týmy naskenují QR / zadají kód a jméno týmu. (Tým bez telefonu přidáš v záložce Týmy.)
-3. **Start hry** → intro → **Vylosovat pavouka** (jména se protočí jako na automatu). Před prvním duelem jde přelosovat.
+3. **Start hry** → intro → **Ukázat pravidla** (6 snímků, přepínáš v adminu; jdou otevřít i kdykoli později přes Pokročilé › Pravidla) → **Vylosovat pavouka** (jména se protočí jako na automatu). Před prvním duelem jde přelosovat. Texty pravidel jsou v `lib/rules.ts`.
 4. **Spustit duel** → na projektoru „tým A vs tým B“, zástupci obou týmů jdou ke stolu.
 5. **Ukázat otázku** → na projektoru jen otázka, oba týmy v duelu mají na telefonu **BZUČ!**. Kdo dřív, je na tahu — teprve pak se ukáže 6 zakrytých karet.
    (Tým bez telefonu: klepni v adminu nahoře na jeho jméno → je na tahu.)
-6. Trefa → klepni na odpověď → tým (na tahu je předvybraný). Vedle → **BZZZ** (jde rovnou na tým na tahu). Po 3 chybách přechází tah na soupeře.
+6. Trefa → klepni na odpověď → tým (na tahu je předvybraný). Vedle → **BZZZ** (jde rovnou na tým na tahu). Po 3 chybách přechází tah na soupeře; když soupeř trefí, **ukradne všechny body z otázky** (hra je převede sama, na projektoru „Ukradeno!“).
 7. **Odkrýt zbytek** → pak **Další otázka** (stejný duel) nebo **Konec duelu** → vyber vítěze (vedoucí je předvybraný) → postoupí v pavoukovi.
 8. Po finále **Vyhlásit vítěze** → pódium (1. šampion, 2. finalista, 3. lepší semifinalista).
 

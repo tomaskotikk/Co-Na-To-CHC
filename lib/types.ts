@@ -43,7 +43,7 @@ export type Team = {
   online: boolean;
 };
 
-export type View = "lobby" | "intro" | "bracket" | "duel" | "board" | "final";
+export type View = "lobby" | "intro" | "rules" | "bracket" | "duel" | "board" | "final";
 
 export type RevealInfo = { by: string | null; points: number };
 
@@ -100,6 +100,8 @@ export type Fx =
   | { id: number; kind: "draw" }
   | { id: number; kind: "duel"; matchId: string }
   | { id: number; kind: "turn"; teamId: string }
+  /** soupeř po třech X trefil a vzal body z celé otázky */
+  | { id: number; kind: "steal"; teamId: string; points: number }
   | { id: number; kind: "advance"; matchId: string; teamId: string };
 
 export type Pending = {
@@ -135,6 +137,8 @@ export type PublicState = {
   teams: Team[];
   questionCount: number;
   questionIndex: number;
+  /** který snímek pravidel je na projektoru (view = "rules") */
+  rulesPage: number;
   question: PublicQuestion | null;
   round: Round | null;
   bracket: Bracket | null;
@@ -185,7 +189,8 @@ export type AdminCmd =
   | { type: "showQuestion"; questionId?: string }
   | { type: "setTurn"; teamId: string }
   | { type: "endDuel"; winnerId: string }
-  | { type: "importSurvey" };
+  | { type: "importSurvey" }
+  | { type: "rules"; page: number };
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 

@@ -6,7 +6,8 @@ import { Bubble, Logo } from "@/components/Logo";
 import { Qr } from "@/components/Qr";
 import { BigX, CountUp, XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
-import { Smartphone, Trophy, Volume2, VolumeX } from "lucide-react";
+import { Hand, Megaphone, Scale, Smartphone, Swords, Trophy, Users, Volume2, VolumeX, X, Zap, type LucideIcon } from "lucide-react";
+import { RULES, type RuleIcon } from "@/lib/rules";
 import { getSocket, resolveBaseUrl, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
 import { audioReady, isMuted, measure, play, setMuted, soundCheck, startSuspense, unlockAudio } from "@/lib/sound";
 import { BracketView, DuelView, podiumOrder } from "./Tournament";
@@ -15,7 +16,8 @@ import { MAX_STRIKES, roundName, type Fx, type Match, type PublicState, type Tea
 type Overlay =
   | { kind: "intro"; key: number; number: number; multiplier: number }
   | { kind: "strike"; key: number; team: Team; count: number }
-  | { kind: "buzz"; key: number; team: Team };
+  | { kind: "buzz"; key: number; team: Team }
+  | { kind: "steal"; key: number; team: Team; points: number };
 
 const viewMotion = {
   initial: { opacity: 0, y: 24, filter: "blur(6px)" },
@@ -97,6 +99,13 @@ export function Screen() {
       case "turn":
         play("pop");
         break;
+      case "steal": {
+        const t = team(fx.teamId);
+        play("correct");
+        setTimeout(() => play("fanfare"), 350);
+        if (t) showOverlay({ kind: "steal", key: fx.id, team: t, points: fx.points }, 2600);
+        break;
+      }
       // losování, duel a postup ozvučují samy komponenty (časování animací)
       case "join":
         play("pop");
@@ -165,10 +174,11 @@ export function Screen() {
 
       {st && (
         <>
-          {(st.view === "board" || st.view === "bracket") && (
+          {(st.view === "board" || st.view === "bracket" || st.view === "rules") && (
             <div className="topbar">
               <Logo />
               <div className="topbar-right">
+                {st.view === "rules" && <span className="pill">Pravidla</span>}
                 {st.view === "board" && st.question && (
                   <>
                     {match && st.bracket && <span className="pill">{roundName(match.round, st.bracket.rounds)}</span>}
@@ -188,6 +198,11 @@ export function Screen() {
             {st.view === "intro" && (
               <motion.div key="intro" className="view" {...viewMotion}>
                 <ShowIntro teams={st.teams} live={lastFx?.kind === "showIntro"} />
+              </motion.div>
+            )}
+            {st.view === "rules" && (
+              <motion.div key="rules" className="view" {...viewMotion}>
+                <Rules page={st.rulesPage} />
               </motion.div>
             )}
             {st.view === "board" && st.question && st.round && (
@@ -248,6 +263,20 @@ export function Screen() {
                 </span>
                 <span className="buzz-name">{overlay.team.name}</span>
                 <span className="buzz-sub">{match ? "jsou na tahu!" : "byli první!"}</span>
+              </div>
+            </div>
+          )}
+
+          {overlay?.kind === "steal" && (
+            <div className="overlay buzz-ov steal-ov" key={overlay.key}>
+              <div className="rays" />
+              <div className="buzz-inner">
+                <span className="buzz-em">
+                  <TeamIcon name={overlay.team.icon} />
+                </span>
+                <span className="steal-word">Ukradeno!</span>
+                <span className="buzz-name">{overlay.team.name}</span>
+                <span className="buzz-sub">berou {overlay.points} bodů</span>
               </div>
             </div>
           )}
@@ -732,6 +761,79 @@ function ShowIntro({ teams, live }: { teams: Team[]; live: boolean }) {
         </div>
       </div>
       <p className="si-ready">Za chvíli losujeme pavouka</p>
+    </section>
+  );
+}
+
+// ───────────────────────────── PRAVIDLA ─────────────────────────────
+
+const RULE_ICONS: Record<RuleIcon, LucideIcon> = {
+  users: Users,
+  zap: Zap,
+  swords: Swords,
+  x: X,
+  hand: Hand,
+  trophy: Trophy,
+  scale: Scale,
+  megaphone: Megaphone,
+};
+
+function Rules({ page }: { page: number }) {
+  const slide = RULES[page] ?? RULES[0];
+  useEffect(() => {
+    play("pop");
+    const timers = slide.items.map((_, i) => setTimeout(() => play("tick"), 450 + i * 160));
+    return () => timers.forEach(clearTimeout);
+  }, [page, slide.items]);
+
+  return (
+    <section className="rules">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={page}
+          className="rules-slide"
+          initial={{ opacity: 0, x: 60 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -60 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <header className="rules-head">
+            <Bubble className="rules-num" tail="30%">
+              {page + 1}
+            </Bubble>
+            <div>
+              <span className="rules-kicker">
+                Pravidlo {page + 1} z {RULES.length}
+              </span>
+              <h1 className="view-title">{slide.title}</h1>
+              <p className="rules-lead">{slide.lead}</p>
+            </div>
+          </header>
+          <ol className="rules-items">
+            {slide.items.map((it, i) => {
+              const Icon = RULE_ICONS[it.icon];
+              return (
+                <li key={i} className={`rules-item ${it.icon === "x" ? "bad" : ""}`} style={{ ["--i" as string]: i }}>
+                  <span className="rules-ic">
+                    <Icon />
+                  </span>
+                  <span className="rules-text">
+                    {it.strong && <b>{it.strong} </b>}
+                    {it.text}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </motion.div>
+      </AnimatePresence>
+      <nav className="rules-dots" aria-hidden>
+        {RULES.map((r, i) => (
+          <span key={r.title} className={`rules-dot ${i === page ? "on" : i < page ? "done" : ""}`}>
+            {r.title}
+          </span>
+        ))}
+      </nav>
     </section>
   );
 }

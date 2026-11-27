@@ -7,7 +7,10 @@ import { XIcon } from "@/components/shared";
 import { TeamIcon } from "@/components/TeamIcon";
 import {
   ArrowLeft,
+  BookOpen,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Eye,
   Hourglass,
@@ -25,6 +28,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { emitAck, useConnected, useOnConnect, useSocketEvent } from "@/lib/socket";
+import { RULES } from "@/lib/rules";
 import {
   champion,
   MAX_STRIKES,
@@ -210,13 +214,14 @@ type Cmd = (c: AdminCmd) => Promise<boolean>;
 const VIEWS: [View, string][] = [
   ["lobby", "Lobby"],
   ["intro", "Intro"],
+  ["rules", "Pravidla"],
   ["bracket", "Pavouk"],
   ["duel", "Duel"],
   ["board", "Otázka"],
   ["final", "Finále"],
 ];
 
-type Step = "lobby" | "intro" | "bracket" | "duel" | "ask" | "play" | "final";
+type Step = "lobby" | "intro" | "rules" | "bracket" | "duel" | "ask" | "play" | "final";
 
 function stepOf(st: AdminState): Step {
   switch (st.view) {
@@ -224,6 +229,8 @@ function stepOf(st: AdminState): Step {
       return "lobby";
     case "intro":
       return "intro";
+    case "rules":
+      return "rules";
     case "bracket":
       return "bracket";
     case "duel":
@@ -269,6 +276,17 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
     case "intro":
       primary = { icon: Shuffle, label: "Vylosovat pavouka", run: () => cmd({ type: "drawBracket" }) };
       break;
+    case "rules": {
+      const page = st.rulesPage;
+      const back = rulesBack(st);
+      primary =
+        page < RULES.length - 1
+          ? { icon: ChevronRight, label: "Další pravidlo", sub: RULES[page + 1].title, run: () => cmd({ type: "rules", page: page + 1 }) }
+          : back
+            ? { icon: ArrowLeft, label: back.label, run: () => cmd({ type: "setView", view: back.view }) }
+            : { icon: Shuffle, label: "Vylosovat pavouka", run: () => cmd({ type: "drawBracket" }) };
+      break;
+    }
     case "bracket":
       primary = champ
         ? { icon: Trophy, label: "Vyhlásit vítěze", sub: name(champ), run: () => cmd({ type: "setView", view: "final" }) }
@@ -310,6 +328,7 @@ function GameTab({ st, cmd }: { st: AdminState; cmd: Cmd }) {
         >
           {step === "lobby" && <LobbyStep st={st} />}
           {step === "intro" && <IntroStep cmd={cmd} />}
+          {step === "rules" && <RulesStep st={st} cmd={cmd} />}
           {step === "bracket" && <BracketStep st={st} cmd={cmd} played={played} />}
           {step === "duel" && match && <DuelStep st={st} match={match} />}
           {(step === "ask" || step === "play") && (
@@ -417,7 +436,8 @@ function Stepper({ st, step }: { st: AdminState; step: Step }) {
   type Item = { label: React.ReactNode; done: boolean; now: boolean };
   const items: Item[] = [
     { label: "Lobby", done: step !== "lobby", now: step === "lobby" },
-    { label: "Intro", done: !!b || step === "final", now: step === "intro" },
+    { label: "Intro", done: !!b || step === "final" || step === "rules", now: step === "intro" },
+    { label: "Pravidla", done: !!b || step === "final", now: step === "rules" },
     { label: "Pavouk", done: !!b && step !== "bracket" && step !== "intro", now: step === "bracket" },
     ...duels.map((m) => {
       const inRound = duels.filter((x) => x.round === m.round);
@@ -492,10 +512,69 @@ function IntroStep({ cmd }: { cmd: Cmd }) {
         <Clapperboard className="step-ic" />
       </span>
       <h2 className="step-title">Na projektoru běží intro</h2>
-      <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), vylosuj pavouka.</p>
-      <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "intro" })}>
-        <RotateCcw className="btn-ic" /> Přehrát intro znovu
-      </button>
+      <p className="mute">Buben, logo a představení týmů. Až dohraje (cca 6 s), ukaž pravidla, nebo rovnou vylosuj pavouka.</p>
+      <div className="row-btns">
+        <button className="btn btn-sm btn-y" onClick={() => cmd({ type: "rules", page: 0 })}>
+          <BookOpen className="btn-ic" /> Ukázat pravidla
+        </button>
+        <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: "intro" })}>
+          <RotateCcw className="btn-ic" /> Přehrát intro znovu
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** kam se vrátit z pravidel, když už hra běží (jinak se po pravidlech losuje pavouk) */
+function rulesBack(st: AdminState): { view: View; label: string } | null {
+  if (st.round) return { view: "board", label: "Zpět k otázce" };
+  if (st.matchId) return { view: "duel", label: "Zpět k duelu" };
+  if (st.bracket) return { view: "bracket", label: "Zpět na pavouka" };
+  return null;
+}
+
+function RulesStep({ st, cmd }: { st: AdminState; cmd: Cmd }) {
+  const page = st.rulesPage;
+  const slide = RULES[page];
+  const back = rulesBack(st);
+  return (
+    <section className="card-a">
+      <div className="q-head">
+        <h3 className="h3">
+          Pravidla na projektoru · {page + 1}/{RULES.length}
+        </h3>
+        {back && page < RULES.length - 1 && (
+          <button className="btn btn-sm" onClick={() => cmd({ type: "setView", view: back.view })}>
+            <ArrowLeft className="btn-ic" /> {back.label}
+          </button>
+        )}
+      </div>
+      <div className="rules-pick">
+        {RULES.map((r, i) => (
+          <button key={r.title} className={`rules-pick-btn ${i === page ? "on" : ""}`} onClick={() => cmd({ type: "rules", page: i })}>
+            <span>{i + 1}</span> {r.title}
+          </button>
+        ))}
+      </div>
+      <div className="rules-read">
+        <p className="rules-read-lead">{slide.lead}</p>
+        <ul>
+          {slide.items.map((it, i) => (
+            <li key={i}>
+              {it.strong && <b>{it.strong} </b>}
+              {it.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="row-btns">
+        <button className="btn btn-sm" disabled={page === 0} onClick={() => cmd({ type: "rules", page: page - 1 })}>
+          <ChevronLeft className="btn-ic" /> Předchozí
+        </button>
+        <button className="btn btn-sm" disabled={page === RULES.length - 1} onClick={() => cmd({ type: "rules", page: page + 1 })}>
+          Další <ChevronRight className="btn-ic" />
+        </button>
+      </div>
     </section>
   );
 }

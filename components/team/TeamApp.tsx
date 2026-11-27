@@ -71,7 +71,7 @@ export function TeamApp({ initialCode }: { initialCode: string }) {
       return;
     }
     seenFx.current = fx.id;
-    if (fx.kind === "flip" && fx.teamId === teamId) {
+    if ((fx.kind === "flip" || fx.kind === "steal") && fx.teamId === teamId) {
       vibrate([40, 60, 40, 60, 120]);
       setFlash({ key: fx.id, kind: "plus", points: fx.points });
     } else if (fx.kind === "strike" && fx.teamId === teamId) {
