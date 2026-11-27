@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore, type DocumentReference } from "firebase-admin/firestore";
+import type { SurveyGroups } from "../surveyGroups";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "game.json");
@@ -19,6 +20,8 @@ export type Stored = { state: unknown; questions: unknown };
 export type SurveyData = {
   questions: { id: string; text: string }[];
   responses: { answers: Record<string, string | null> }[];
+  /** pravidla slučování psaných odpovědí (survey/groups) */
+  groups: SurveyGroups;
 };
 
 type Loaded = { data: unknown; time: number };
@@ -158,13 +161,18 @@ export function createStorage(): Storage {
       writeQuestions({ list: q });
     },
     async readSurvey() {
-      const [qs, rs] = await withTimeout(
-        Promise.all([db.collection("survey").doc("questions").get(), db.collection("survey_responses").get()]),
+      const [qs, rs, gs] = await withTimeout(
+        Promise.all([
+          db.collection("survey").doc("questions").get(),
+          db.collection("survey_responses").get(),
+          db.collection("survey").doc("groups").get(),
+        ]),
         LOAD_TIMEOUT_MS,
       );
       return {
         questions: (qs.data()?.list ?? []) as SurveyData["questions"],
         responses: rs.docs.map((d) => ({ answers: (d.data().answers ?? {}) as Record<string, string | null> })),
+        groups: (gs.data() ?? {}) as SurveyGroups,
       };
     },
   };

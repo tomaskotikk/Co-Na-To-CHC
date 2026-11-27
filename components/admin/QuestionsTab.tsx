@@ -50,7 +50,7 @@ export function QuestionsTab({ st, cmd, onPlay }: { st: AdminState; cmd: Cmd; on
       <section className="card-a import-card">
         <h3 className="h3">Otázky z dotazníku</h3>
         <p className="mute small">
-          Spočítá odpovědi z dotazníku: u každé otázky 6 nejčastějších, body = jejich podíl hlasů (dohromady 100). Pořadí otázek se zamíchá. Odpovědi pak můžeš níž ručně učesat (sloučit „Kouří“ a „Jde kouřit“).
+          Spočítá odpovědi z dotazníku: podobné odpovědi sloučí stejně jako web s výsledky („Spánek“ + „Spát“ = jedna), u každé otázky vezme 6 nejčastějších, body = jejich podíl hlasů (dohromady 100). Pořadí otázek se zamíchá.
           Nahradí otázky CHC ({st.questions.filter((q) => q.source === "chc").length}), otázky z Co na to Češi zůstanou.
         </p>
         <button

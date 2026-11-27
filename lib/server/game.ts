@@ -810,7 +810,7 @@ export class Game {
   private async importSurvey(): Promise<string | null> {
     const data = await this.storage.readSurvey?.();
     if (!data) return "Firebase není nastavený — dotazník nejde načíst.";
-    const qs = buildFromSurvey(data.questions, data.responses, () => id());
+    const qs = buildFromSurvey(data, () => id());
     if (!qs.length) return "V dotazníku zatím nejsou odpovědi.";
     this.cancelPendingSilently();
     // otázky z Co na to Češi zůstávají, nahradí se jen ty z dotazníku
